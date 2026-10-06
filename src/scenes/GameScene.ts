@@ -14,7 +14,9 @@ import type { Board, Color, Flask } from '../core/board';
 import { generateLevel } from '../core/generator';
 import type { Level } from '../core/generator';
 import { FlaskView } from '../view/FlaskView';
+import { createTextButton } from '../view/button';
 import { AudioService } from '../services/audio';
+import { saveCurrentLevel, unlockLevel } from '../services/storage';
 
 const TOP_MARGIN = 160;
 const BOTTOM_MARGIN = 40;
@@ -45,15 +47,13 @@ export class GameScene extends Phaser.Scene {
   private winBackdrop!: Phaser.GameObjects.Rectangle;
   private winTitle!: Phaser.GameObjects.Text;
   private winButton!: Phaser.GameObjects.Text;
-  private soundButton!: Phaser.GameObjects.Text;
-  private hapticsButton!: Phaser.GameObjects.Text;
 
   constructor() {
     super('Game');
   }
 
-  preload(): void {
-    AudioService.preload(this);
+  init(data: { level?: number }): void {
+    this.levelNumber = data.level ?? 1;
   }
 
   create(): void {
@@ -68,20 +68,9 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.createButton(this.scale.width / 2 - 90, 110, 'Restart', () => this.restart());
-    this.createButton(this.scale.width / 2 + 90, 110, 'Undo', () => this.undo());
-
-    this.soundButton = this.createToggleButton(20, 20, () => {
-      const enabled = this.audio.toggleSound();
-      this.soundButton.setText(enabled ? '🔊' : '🔇');
-    });
-    this.soundButton.setText(this.audio.soundEnabled ? '🔊' : '🔇');
-
-    this.hapticsButton = this.createToggleButton(70, 20, () => {
-      const enabled = this.audio.toggleHaptics();
-      this.hapticsButton.setText(enabled ? '📳' : '🚫');
-    });
-    this.hapticsButton.setText(this.audio.hapticsEnabled ? '📳' : '🚫');
+    createTextButton(this, 70, 30, '< Menu', () => this.scene.start('Menu'));
+    createTextButton(this, this.scale.width / 2 - 90, 110, 'Restart', () => this.restart());
+    createTextButton(this, this.scale.width / 2 + 90, 110, 'Undo', () => this.undo());
 
     this.winOverlay = this.buildWinOverlay();
     this.winOverlay.setVisible(false);
@@ -98,32 +87,6 @@ export class GameScene extends Phaser.Scene {
     g.fillCircle(4, 4, 4);
     g.generateTexture(PARTICLE_TEXTURE, 8, 8);
     g.destroy();
-  }
-
-  private createButton(x: number, y: number, label: string, onTap: () => void): void {
-    this.add
-      .text(x, y, label, {
-        fontFamily: theme.font.family,
-        fontSize: `${theme.font.size.body}px`,
-        color: '#ffffff',
-        backgroundColor: '#ffffff22',
-        padding: { x: 16, y: 8 },
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', onTap);
-  }
-
-  private createToggleButton(x: number, y: number, onTap: () => void): Phaser.GameObjects.Text {
-    return this.add
-      .text(x, y, '', {
-        fontSize: '24px',
-        backgroundColor: '#ffffff22',
-        padding: { x: 8, y: 6 },
-      })
-      .setOrigin(0, 0)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', onTap);
   }
 
   private buildWinOverlay(): Phaser.GameObjects.Container {
@@ -161,6 +124,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private loadLevel(levelNumber: number): void {
+    this.levelNumber = levelNumber;
     this.level = generateLevel(levelNumber);
     this.board = this.level.board;
     this.history = [];
@@ -169,6 +133,7 @@ export class GameScene extends Phaser.Scene {
     this.animating = false;
     this.winOverlay.setVisible(false);
     this.levelText.setText(`Level ${levelNumber}`);
+    saveCurrentLevel(levelNumber);
 
     for (const view of this.flaskViews) {
       this.tweens.killTweensOf(view);
@@ -371,6 +336,8 @@ export class GameScene extends Phaser.Scene {
       this.audio.play('win');
       this.audio.vibrate([15, 40, 15, 40, 25]);
       this.spawnWinCelebration();
+      unlockLevel(this.levelNumber + 1);
+      saveCurrentLevel(this.levelNumber + 1);
     }
   }
 
