@@ -8,7 +8,7 @@ export class MenuScene extends Phaser.Scene {
     super('Menu');
   }
 
-  create(): void {
+  async create(): Promise<void> {
     const { width, height } = this.scale;
 
     this.add
@@ -19,7 +19,7 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const progress = loadProgress();
+    const progress = await loadProgress();
     const playLabel = progress.currentLevel > 1 ? 'Continue' : 'Play';
 
     createTextButton(this, width / 2, height * 0.5, playLabel, () => {

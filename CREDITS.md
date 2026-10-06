@@ -18,3 +18,9 @@ Credited here anyway as thanks.
 ## Fonts
 
 _None bundled yet — planned per CLAUDE.md (a rounded Google Font, e.g. Fredoka or Nunito)._
+
+## App icon and splash screen
+
+Self-made (`assets/icon*.png`, `assets/splash.png`): a flat flask glyph in the game's own liquid
+colors, matching the in-game `FlaskView` art style. Not from an external source - placeholder
+quality, revisit in the planned UI/icon polish pass.

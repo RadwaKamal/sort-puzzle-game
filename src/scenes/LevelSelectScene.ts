@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { theme } from '../theme';
 import { createTextButton } from '../view/button';
 import { loadProgress } from '../services/storage';
+import type { Progress } from '../services/storage';
 
 const LEVELS_PER_PAGE = 20;
 const COLUMNS = 5;
@@ -10,6 +11,7 @@ const MAX_PAGE = Math.floor((MAX_LEVEL - 1) / LEVELS_PER_PAGE);
 
 export class LevelSelectScene extends Phaser.Scene {
   private page = 0;
+  private progress!: Progress;
   private gridContainer!: Phaser.GameObjects.Container;
   private pageText!: Phaser.GameObjects.Text;
 
@@ -17,10 +19,10 @@ export class LevelSelectScene extends Phaser.Scene {
     super('LevelSelect');
   }
 
-  create(): void {
+  async create(): Promise<void> {
     const { width, height } = this.scale;
-    const progress = loadProgress();
-    this.page = Math.floor((progress.unlockedLevel - 1) / LEVELS_PER_PAGE);
+    this.progress = await loadProgress();
+    this.page = Math.floor((this.progress.unlockedLevel - 1) / LEVELS_PER_PAGE);
 
     this.add
       .text(width / 2, 50, 'Select Level', {
@@ -55,7 +57,6 @@ export class LevelSelectScene extends Phaser.Scene {
 
   private renderPage(): void {
     this.gridContainer.removeAll(true);
-    const progress = loadProgress();
     const { width } = this.scale;
 
     const startLevel = this.page * LEVELS_PER_PAGE + 1;
@@ -72,7 +73,7 @@ export class LevelSelectScene extends Phaser.Scene {
       const row = Math.floor(i / COLUMNS);
       const x = startX + col * cellW;
       const y = startY + row * rowH;
-      const unlocked = levelNumber <= progress.unlockedLevel;
+      const unlocked = levelNumber <= this.progress.unlockedLevel;
 
       const button = this.add
         .text(x, y, String(levelNumber), {

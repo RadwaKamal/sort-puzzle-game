@@ -133,7 +133,7 @@ export class GameScene extends Phaser.Scene {
     this.animating = false;
     this.winOverlay.setVisible(false);
     this.levelText.setText(`Level ${levelNumber}`);
-    saveCurrentLevel(levelNumber);
+    void saveCurrentLevel(levelNumber);
 
     for (const view of this.flaskViews) {
       this.tweens.killTweensOf(view);
@@ -197,7 +197,7 @@ export class GameScene extends Phaser.Scene {
         this.selectedIndex = index;
         this.flaskViews[index].setSelected(true);
         this.audio.play('select');
-        this.audio.vibrate(8);
+        this.audio.haptic('select');
       }
       return;
     }
@@ -216,7 +216,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.audio.play('error');
-    this.audio.vibrate([10, 30, 10]);
+    this.audio.haptic('error');
     this.flaskViews[index].shake();
   }
 
@@ -288,7 +288,7 @@ export class GameScene extends Phaser.Scene {
       targetView.squashBounce();
       this.spawnSparkle(targetView.layoutX, targetView.layoutY, this.board[targetIndex][0]);
       this.audio.play('complete');
-      this.audio.vibrate(15);
+      this.audio.haptic('complete');
     }
 
     this.checkWin();
@@ -334,10 +334,10 @@ export class GameScene extends Phaser.Scene {
       this.won = true;
       this.winOverlay.setVisible(true);
       this.audio.play('win');
-      this.audio.vibrate([15, 40, 15, 40, 25]);
+      this.audio.haptic('win');
       this.spawnWinCelebration();
-      unlockLevel(this.levelNumber + 1);
-      saveCurrentLevel(this.levelNumber + 1);
+      void unlockLevel(this.levelNumber + 1);
+      void saveCurrentLevel(this.levelNumber + 1);
     }
   }
 

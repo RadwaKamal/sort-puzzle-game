@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
+import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 
 export type SoundName = 'select' | 'pour' | 'complete' | 'win' | 'error';
+export type HapticCue = 'select' | 'complete' | 'error' | 'win';
 
 const SOUND_FILES: Record<SoundName, string> = {
   select: 'assets/sounds/select.ogg',
@@ -30,9 +32,10 @@ function writeBoolean(key: string, value: boolean): void {
   }
 }
 
-// Wraps Phaser's sound manager for short SFX, plus a Web Vibration API haptic
-// tap. Capacitor Haptics replaces the vibration call on native Android once
-// Capacitor is wired up in Milestone 6; this keeps working as a web fallback.
+// Wraps Phaser's sound manager for short SFX, plus Capacitor Haptics for
+// haptic taps. Haptics has its own web implementation (Web Vibration API
+// under the hood) so this works unchanged in the browser and with real
+// native haptics once this runs inside the Capacitor Android shell.
 export class AudioService {
   private readonly scene: Phaser.Scene;
   soundEnabled: boolean;
@@ -55,10 +58,21 @@ export class AudioService {
     this.scene.sound.play(name, { volume: 0.6 });
   }
 
-  vibrate(pattern: number | number[] = 15): void {
+  haptic(cue: HapticCue): void {
     if (!this.hapticsEnabled) return;
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate(pattern);
+    switch (cue) {
+      case 'select':
+        void Haptics.impact({ style: ImpactStyle.Light });
+        break;
+      case 'complete':
+        void Haptics.impact({ style: ImpactStyle.Medium });
+        break;
+      case 'error':
+        void Haptics.notification({ type: NotificationType.Error });
+        break;
+      case 'win':
+        void Haptics.notification({ type: NotificationType.Success });
+        break;
     }
   }
 
