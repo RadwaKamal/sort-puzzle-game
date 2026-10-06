@@ -17,8 +17,9 @@ import { FlaskView } from '../view/FlaskView';
 import { createTextButton } from '../view/button';
 import { AudioService } from '../services/audio';
 import { saveCurrentLevel, unlockLevel } from '../services/storage';
+import { AdService } from '../services/ads';
 
-const TOP_MARGIN = 160;
+const TOP_MARGIN = 220;
 const BOTTOM_MARGIN = 40;
 const SIDE_MARGIN = 24;
 const FLASK_ASPECT = 2.2; // height / width
@@ -40,9 +41,12 @@ export class GameScene extends Phaser.Scene {
   private won = false;
   private animating = false;
   private audio!: AudioService;
+  private ads!: AdService;
+  private freeUndoesRemaining = 3;
 
   private flaskViews: FlaskView[] = [];
   private levelText!: Phaser.GameObjects.Text;
+  private undoButton!: Phaser.GameObjects.Text;
   private winOverlay!: Phaser.GameObjects.Container;
   private winBackdrop!: Phaser.GameObjects.Rectangle;
   private winTitle!: Phaser.GameObjects.Text;
@@ -58,6 +62,8 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.audio = new AudioService(this);
+    this.ads = new AdService();
+    void this.ads.initialize();
     this.createParticleTexture();
 
     this.levelText = this.add
@@ -70,7 +76,15 @@ export class GameScene extends Phaser.Scene {
 
     createTextButton(this, 70, 30, '< Menu', () => this.scene.start('Menu'));
     createTextButton(this, this.scale.width / 2 - 90, 110, 'Restart', () => this.restart());
-    createTextButton(this, this.scale.width / 2 + 90, 110, 'Undo', () => this.undo());
+    this.undoButton = createTextButton(this, this.scale.width / 2 + 90, 110, '', () =>
+      void this.undo(),
+    );
+    createTextButton(this, this.scale.width / 2 - 90, 170, 'Extra Flask (Ad)', () =>
+      void this.onExtraFlask(),
+    );
+    createTextButton(this, this.scale.width / 2 + 90, 170, 'Skip Level (Ad)', () =>
+      void this.onSkip(),
+    );
 
     this.winOverlay = this.buildWinOverlay();
     this.winOverlay.setVisible(false);
@@ -108,7 +122,7 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.nextLevel());
+      .on('pointerdown', () => void this.nextLevel());
 
     const container = this.add.container(0, 0, [this.winBackdrop, this.winTitle, this.winButton]);
     container.setDepth(1000);
@@ -131,6 +145,8 @@ export class GameScene extends Phaser.Scene {
     this.selectedIndex = null;
     this.won = false;
     this.animating = false;
+    this.freeUndoesRemaining = 3;
+    this.updateUndoButtonLabel();
     this.winOverlay.setVisible(false);
     this.levelText.setText(`Level ${levelNumber}`);
     void saveCurrentLevel(levelNumber);
@@ -341,8 +357,22 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private undo(): void {
+  // 3 undos per level are free; after that, each one costs a rewarded ad.
+  // `animating` doubles as a busy-flag while the ad is in flight, so a second
+  // tap on Undo/Extra Flask/Skip/Restart can't race this one.
+  private async undo(): Promise<void> {
     if (this.won || this.animating || this.history.length === 0) return;
+
+    if (this.freeUndoesRemaining > 0) {
+      this.freeUndoesRemaining--;
+    } else {
+      this.animating = true;
+      const earned = await this.ads.showRewardedAd();
+      this.animating = false;
+      if (!earned) return;
+    }
+    this.updateUndoButtonLabel();
+
     if (this.selectedIndex !== null) {
       this.flaskViews[this.selectedIndex].setSelected(false);
       this.selectedIndex = null;
@@ -351,12 +381,55 @@ export class GameScene extends Phaser.Scene {
     this.flaskViews.forEach((view, i) => view.render(this.board[i]));
   }
 
+  private updateUndoButtonLabel(): void {
+    this.undoButton.setText(
+      this.freeUndoesRemaining > 0 ? `Undo (${this.freeUndoesRemaining})` : 'Undo (Ad)',
+    );
+  }
+
+  // Adds one empty flask to the current board - always behind a rewarded ad.
+  private async onExtraFlask(): Promise<void> {
+    if (this.won || this.animating) return;
+    this.animating = true;
+    const earned = await this.ads.showRewardedAd();
+    this.animating = false;
+    if (!earned || this.won) return;
+
+    this.board = [...this.board, []];
+    const index = this.board.length - 1;
+    const view = new FlaskView(this, index, (i) => this.onFlaskTapped(i));
+    this.add.existing(view);
+    this.flaskViews = [...this.flaskViews, view];
+    this.relayout();
+  }
+
+  // Skips straight to the next level - always behind a rewarded ad. Counts
+  // as a completed level for progress and the interstitial cadence, but
+  // skips the win celebration since the player didn't actually solve it.
+  private async onSkip(): Promise<void> {
+    if (this.won || this.animating) return;
+    this.animating = true;
+    const earned = await this.ads.showRewardedAd();
+    if (!earned) {
+      this.animating = false;
+      return;
+    }
+
+    void unlockLevel(this.levelNumber + 1);
+    await this.advanceToLevel(this.levelNumber + 1);
+  }
+
   private restart(): void {
+    if (this.animating) return;
     this.loadLevel(this.levelNumber);
   }
 
-  private nextLevel(): void {
-    this.levelNumber += 1;
-    this.loadLevel(this.levelNumber);
+  private async nextLevel(): Promise<void> {
+    await this.advanceToLevel(this.levelNumber + 1);
+  }
+
+  private async advanceToLevel(levelNumber: number): Promise<void> {
+    await this.ads.maybeShowInterstitial(this.levelNumber);
+    this.loadLevel(levelNumber);
   }
 }

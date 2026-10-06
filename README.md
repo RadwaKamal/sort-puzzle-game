@@ -83,6 +83,19 @@ npx cap add android                  # generates the android/ native project
 npx @capacitor/assets generate --android   # writes the app icon + splash screen from assets/
 ```
 
+Then add the AdMob app ID meta-data to `android/app/src/main/AndroidManifest.xml` inside the
+`<application>` tag (the plugin doesn't inject this automatically, and the file is regenerated
+each time, so it's not something that can live in the repo):
+
+```xml
+<!-- Google's test AdMob app ID - safe to use in all development builds.
+     Replace with the real app ID (from a config, not hard-coded) before
+     a Play Store release. -->
+<meta-data
+    android:name="com.google.android.gms.ads.APPLICATION_ID"
+    android:value="ca-app-pub-3940256099942544~3347511713" />
+```
+
 ### After any change to web code or assets
 
 ```bash
@@ -103,6 +116,9 @@ device/emulator with `adb install -r app/build/outputs/apk/debug/app-debug.apk`,
 
 The very first build downloads the Gradle distribution and Android Gradle Plugin (a few hundred
 MB) and can take a long time depending on connection speed; every build after that is fast.
+
+Current debug APK size is ~12 MB (most of it the AdMob SDK), against the ~15 MB target in
+`CLAUDE.md` - worth watching if more native plugins are added later.
 
 ### Build a release AAB (for Play Store submission)
 
@@ -135,12 +151,28 @@ Milestone 8 in `CLAUDE.md`.
 package name. Changing it after a Play Store submission is effectively impossible (it's the
 app's permanent identity), so confirm it before release.
 
+## Ads
+
+`src/services/ads.ts` wraps `@capacitor-community/admob`. It currently uses Google's public test
+ad unit IDs everywhere (safe to hardcode — they're meant for exactly this) and the AndroidManifest
+app ID is the test app ID (see "Android build" above). Before a real release: get a real AdMob
+account/app, source the real ad unit IDs and app ID from build config instead of the constants in
+`ads.ts`, and update the manifest meta-data.
+
+The plugin ships its own web implementation (logs and resolves instantly, no real ad UI), so
+`AdService` works unchanged in the browser — no separate mock class was needed.
+
+- **Undo**: 3 free per level, then each one costs a rewarded ad.
+- **Extra Flask**: adds one empty flask to the current board, always behind a rewarded ad.
+- **Skip Level**: advances to the next level without solving it, always behind a rewarded ad.
+- **Interstitial**: shown at most once every 3 completed levels (win or skip both count), never
+  during the first 5 levels, right before the next level loads.
+
 ## Project status
 
-Currently on **Milestone 6** of the plan in `CLAUDE.md`: Capacitor wired up with a real Android
-build (debug APK verified building and installable), app icon and splash screen, and native
-Haptics/Preferences replacing their web-only fallbacks. See `CLAUDE.md` for the full milestone
-list and game design.
+Currently on **Milestone 7** of the plan in `CLAUDE.md`: ads wired up end to end (rewarded
+helpers, interstitial cadence) on Google's test ad units, verified in the browser and with a
+real Android debug build. See `CLAUDE.md` for the full milestone list and game design.
 
 ## Repo structure
 
@@ -151,7 +183,7 @@ src/
   core/         pure game logic (board state, level generation, solver) — no Phaser imports
   scenes/       Phaser scenes (Boot, Menu, LevelSelect, Settings, Game)
   view/         flask drawing, pour animation, particles, shared UI button helper
-  services/     save/load progress (storage.ts), audio/haptics (audio.ts)
+  services/     save/load progress (storage.ts), audio/haptics (audio.ts), ads (ads.ts)
 tests/          Vitest tests for src/core/
 public/assets/  sounds bundled with the web app
 assets/         source icon/splash images used by `@capacitor/assets` (not the generated output)
