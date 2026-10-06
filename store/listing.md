@@ -80,5 +80,9 @@ Declare:
 
 ## Privacy policy URL
 
-Once `docs/privacy-policy.html` is published via GitHub Pages, its URL goes in the Play Console
-"Privacy policy" field (Play Console requires this for any app with ads).
+```
+https://radwakamal.github.io/sort-puzzle-game/privacy-policy.html
+```
+
+Live via GitHub Pages (source: `docs/privacy-policy.html`). Paste this into the Play Console
+"Privacy policy" field (required for any app with ads).
