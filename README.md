@@ -41,6 +41,24 @@ Preview the production build locally:
 npm run preview
 ```
 
+### itch.io web build
+
+The build uses relative asset paths (`base: './'` in `vite.config.ts`) specifically so the same
+`dist/` output works both wrapped by Capacitor *and* uploaded directly to itch.io, which serves
+HTML5 games from a non-root subpath (absolute `/assets/...` paths would 404 there). Verified by
+serving a copy of `dist/` from a subpath locally and confirming no failed requests.
+
+To package for itch.io:
+
+```bash
+npm run build
+cd dist && zip -r ../potion-sort-web.zip . -x ".*" && cd ..
+```
+
+Upload `potion-sort-web.zip` as an HTML5 project on itch.io, set `index.html` as the entry point,
+and check "This file will be played in the browser" with the viewport dimensions set to embed
+(not fixed), since the game scales to fill its container.
+
 ## Test
 
 Runs the Vitest suite (pure game logic in `src/core/`, no Phaser/browser needed):
@@ -141,9 +159,9 @@ cd android
 # android/app/build/outputs/bundle/release/app-release.aab
 ```
 
-Google Play's current requirements for new personal developer accounts (closed testing with
-real testers, target API level minimums) should be checked before the actual submission — see
-Milestone 8 in `CLAUDE.md`.
+Google Play's current requirements for new personal developer accounts (registration, closed
+testing with real testers, target API level) are researched and checklisted in
+`store/release-checklist.md`.
 
 ### App identity
 
@@ -168,11 +186,24 @@ The plugin ships its own web implementation (logs and resolves instantly, no rea
 - **Interstitial**: shown at most once every 3 completed levels (win or skip both count), never
   during the first 5 levels, right before the next level loads.
 
+## Release prep
+
+- `docs/privacy-policy.html` — static privacy policy, publishable via GitHub Pages (repo Settings
+  → Pages → Source: `main` branch, `/docs` folder).
+- `store/listing.md` — app name, short/full description, category, Data Safety section notes.
+- `store/screenshots-checklist.md` — required Play Store graphics, current status, and how to
+  recapture screenshots once the planned UI/icon polish pass is done.
+- `store/release-checklist.md` — researched Google Play requirements for a new personal developer
+  account (fees, identity verification, closed testing, target API level) plus a pre-submission
+  checklist.
+
 ## Project status
 
-Currently on **Milestone 7** of the plan in `CLAUDE.md`: ads wired up end to end (rewarded
-helpers, interstitial cadence) on Google's test ad units, verified in the browser and with a
-real Android debug build. See `CLAUDE.md` for the full milestone list and game design.
+Currently on **Milestone 8** of the plan in `CLAUDE.md`: release prep. Privacy policy, store
+listing text, a screenshots checklist (with a first real placeholder set), and a verified web
+build for itch.io are all in place; see "Release prep" above and `store/release-checklist.md`
+for what's still manual work before an actual submission (real ad IDs, final store graphics,
+the 14-day closed test). See `CLAUDE.md` for the full milestone list and game design.
 
 ## Repo structure
 
@@ -187,6 +218,8 @@ src/
 tests/          Vitest tests for src/core/
 public/assets/  sounds bundled with the web app
 assets/         source icon/splash images used by `@capacitor/assets` (not the generated output)
+docs/           static privacy policy page, published via GitHub Pages
+store/          Play Store listing text, screenshots checklist, and release checklist
 android/        generated native project (gitignored - see "Android build" above)
 capacitor.config.ts  Capacitor app id, name, web asset directory
 ```

@@ -4,6 +4,7 @@ dist-ssr/
 .vitest/
 *.tsbuildinfo
 *.local
+*.zip
 
 # Capacitor native projects (generated, added in milestone 6)
 /android
