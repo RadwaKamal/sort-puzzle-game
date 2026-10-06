@@ -16,12 +16,7 @@ describe('solve', () => {
   });
 
   it('solves a layout that needs several pours to untangle', () => {
-    const board: Board = [
-      [0, 1, 0, 1],
-      [1, 0, 1, 0],
-      [],
-      [],
-    ];
+    const board: Board = [[0, 1, 0, 1], [1, 0, 1, 0], [], []];
     const result = solve(board);
     expect(result.solvable).toBe(true);
     expect(result.moveCount).toBeGreaterThan(0);
