@@ -35,10 +35,11 @@ export class FlaskView extends Phaser.GameObjects.Container {
     this.width_ = w;
     this.height_ = h;
     this.setSize(w, h);
-    this.setInteractive(
-      new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h),
-      Phaser.Geom.Rectangle.Contains,
-    );
+    // Phaser's Container hit test resolves the callback's local (x, y) relative
+    // to the container's top-left corner, not its center — even though children
+    // are drawn centered at (0, 0). A centered hit area rect (-w/2, -h/2, w, h)
+    // silently only catches the top-left quadrant of clicks; it must be (0, 0, w, h).
+    this.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
     this.drawGlass();
   }
 
