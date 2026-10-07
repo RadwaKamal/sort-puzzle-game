@@ -4,10 +4,29 @@ import { LAYERS_PER_FLASK } from '../core/board';
 import type { Color, Flask } from '../core/board';
 
 const LAYER_PADDING = 3;
+const CUBE_SIZE = 10;
+const CUBE_GRID_TEXTURE = 'liquidCubeGrid';
 
 interface LiquidSegment {
   color: Color;
   height: number;
+}
+
+// One tileable cell: a dark bevel on the bottom/right edge and a light bevel
+// on the top/left, so tiling it across a flat fill reads as a stack of small
+// cubes (like voxel-art liquid) instead of a single flat rectangle.
+function ensureCubeGridTexture(scene: Phaser.Scene): string {
+  if (scene.textures.exists(CUBE_GRID_TEXTURE)) return CUBE_GRID_TEXTURE;
+  const g = scene.add.graphics();
+  g.lineStyle(1, 0x000000, 0.25);
+  g.lineBetween(0, CUBE_SIZE - 0.5, CUBE_SIZE, CUBE_SIZE - 0.5);
+  g.lineBetween(CUBE_SIZE - 0.5, 0, CUBE_SIZE - 0.5, CUBE_SIZE);
+  g.lineStyle(1, 0xffffff, 0.18);
+  g.lineBetween(0, 0.5, CUBE_SIZE, 0.5);
+  g.lineBetween(0.5, 0, 0.5, CUBE_SIZE);
+  g.generateTexture(CUBE_GRID_TEXTURE, CUBE_SIZE, CUBE_SIZE);
+  g.destroy();
+  return CUBE_GRID_TEXTURE;
 }
 
 // Draws one flask: a hard drop shadow, solid dark background, stacked liquid
@@ -26,6 +45,7 @@ export class FlaskView extends Phaser.GameObjects.Container {
   private readonly shadow: Phaser.GameObjects.Graphics;
   private readonly background: Phaser.GameObjects.Graphics;
   private readonly liquid: Phaser.GameObjects.Graphics;
+  private readonly liquidGrid: Phaser.GameObjects.TileSprite;
   private readonly outline: Phaser.GameObjects.Graphics;
   private width_ = 0;
   private height_ = 0;
@@ -40,11 +60,30 @@ export class FlaskView extends Phaser.GameObjects.Container {
     this.shadow = scene.add.graphics();
     this.background = scene.add.graphics();
     this.liquid = scene.add.graphics();
+    this.liquidGrid = scene.add.tileSprite(0, 0, 1, 1, ensureCubeGridTexture(scene));
+    this.liquidGrid.setOrigin(0, 0);
+    this.liquidGrid.setVisible(false);
     this.outline = scene.add.graphics();
-    this.add([this.shadow, this.background, this.liquid, this.outline]);
+    this.add([this.shadow, this.background, this.liquid, this.liquidGrid, this.outline]);
 
     this.setSize(0, 0);
     this.on('pointerdown', () => onTap(this.index));
+  }
+
+  get flaskWidth(): number {
+    return this.width_;
+  }
+
+  get flaskHeight(): number {
+    return this.height_;
+  }
+
+  // World-space-relative local Y of the liquid surface for a given fill
+  // amount in layer-units (fractional mid-pour). Used by GameScene to land
+  // flying pour cubes exactly on the rising liquid's current top edge.
+  liquidTopLocalY(units: number, capacity = LAYERS_PER_FLASK): number {
+    const layerH = (this.height_ - LAYER_PADDING * 2) / capacity;
+    return this.height_ / 2 - LAYER_PADDING - units * layerH;
   }
 
   layout(x: number, y: number, w: number, h: number): void {
@@ -160,6 +199,22 @@ export class FlaskView extends Phaser.GameObjects.Container {
       this.liquid.fillStyle(color, 1);
       this.liquid.fillRect(-innerW / 2, y, innerW, segmentHeightPx);
       cursor += segment.height;
+    }
+
+    // Pixel-cube grid overlay + a 1px top "shine" line, matching the
+    // Arcade Potion Lab pixel-art direction - the liquid should read as
+    // stacked little cubes, not a flat tinted rectangle.
+    const totalPx = cursor * layerH;
+    if (totalPx > 0) {
+      const topY = this.height_ / 2 - LAYER_PADDING - totalPx;
+      this.liquid.fillStyle(0xffffff, 0.22);
+      this.liquid.fillRect(-innerW / 2, topY, innerW, Math.min(2, totalPx));
+
+      this.liquidGrid.setVisible(true);
+      this.liquidGrid.setPosition(-innerW / 2, topY);
+      this.liquidGrid.setSize(innerW, totalPx);
+    } else {
+      this.liquidGrid.setVisible(false);
     }
   }
 

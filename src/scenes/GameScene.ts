@@ -24,6 +24,8 @@ const BOTTOM_MARGIN = 40;
 const SIDE_MARGIN = 24;
 const FLASK_ASPECT = 2.2; // height / width
 const PARTICLE_TEXTURE = 'particle';
+const POUR_CUBE_TEXTURE = 'pourCube';
+const POUR_CUBE_SIZE = 18;
 
 interface FlaskSlot {
   x: number;
@@ -65,6 +67,7 @@ export class GameScene extends Phaser.Scene {
     this.ads = new AdService();
     void this.ads.initialize();
     this.createParticleTexture();
+    this.createPourCubeTexture();
 
     this.levelText = this.add
       .text(this.scale.width / 2, 60, '', {
@@ -145,6 +148,36 @@ export class GameScene extends Phaser.Scene {
     g.fillCircle(4, 4, 4);
     g.generateTexture(PARTICLE_TEXTURE, 8, 8);
     g.destroy();
+  }
+
+  // A small square "pixel cube" sprite, tinted per-color at spawn time, used
+  // to fly from the source flask to the target during a pour so the liquid
+  // visibly moves as chunky cubes rather than a smoothly growing rectangle.
+  private createPourCubeTexture(): void {
+    if (this.textures.exists(POUR_CUBE_TEXTURE)) return;
+    const g = this.add.graphics();
+    g.fillStyle(0xffffff, 1);
+    g.fillRect(0, 0, POUR_CUBE_SIZE, POUR_CUBE_SIZE);
+    g.lineStyle(2, 0x000000, 0.35);
+    g.strokeRect(1, 1, POUR_CUBE_SIZE - 2, POUR_CUBE_SIZE - 2);
+    g.fillStyle(0xffffff, 0.4);
+    g.fillRect(2, 2, POUR_CUBE_SIZE - 4, 3);
+    g.generateTexture(POUR_CUBE_TEXTURE, POUR_CUBE_SIZE, POUR_CUBE_SIZE);
+    g.destroy();
+  }
+
+  private spawnPourCube(fromX: number, fromY: number, toX: number, toY: number, color: Color): void {
+    const tint = theme.liquidColors[color % theme.liquidColors.length];
+    const cube = this.add.image(fromX, fromY, POUR_CUBE_TEXTURE).setTint(tint).setDepth(20);
+    this.tweens.add({
+      targets: cube,
+      x: toX,
+      y: toY,
+      angle: Phaser.Math.Between(-200, 200),
+      duration: 150,
+      ease: 'Cubic.easeIn',
+      onComplete: () => cube.destroy(),
+    });
   }
 
   private buildWinOverlay(): Phaser.GameObjects.Container {
@@ -303,17 +336,33 @@ export class GameScene extends Phaser.Scene {
     const STEPS_PER_UNIT = 5;
     const steps = Math.max(4, Math.round(amount * STEPS_PER_UNIT));
 
+    // Lip the cubes launch from (top of the tilted, lifted source flask, on
+    // the side facing the target) - an approximation, not exact tilt trig,
+    // good enough for a juice effect.
+    const lipX = sourceView.layoutX + direction * (sourceView.flaskWidth / 2 - 4);
+    const lipY = sourceView.layoutY - sourceView.flaskHeight / 2 - 16;
+    const targetBaseUnits = targetBefore.length;
+
     sourceView.tiltTowards(direction, () => {
       const progress = { t: 0 };
+      let lastStep = 0;
       this.tweens.add({
         targets: progress,
         t: 1,
         duration: 320,
         ease: 'Sine.easeInOut',
         onUpdate: () => {
-          const stepped = Math.floor(progress.t * steps) / steps;
+          const stepIndex = Math.floor(progress.t * steps);
+          const stepped = stepIndex / steps;
           this.renderPourFrame(sourceView, sourceBefore, true, amount, pourColor, 1 - stepped);
           this.renderPourFrame(targetView, targetBefore, false, amount, pourColor, stepped);
+
+          if (stepIndex > lastStep) {
+            lastStep = stepIndex;
+            const landingY =
+              targetView.layoutY + targetView.liquidTopLocalY(targetBaseUnits + amount * stepped);
+            this.spawnPourCube(lipX, lipY, targetView.layoutX, landingY, pourColor);
+          }
         },
         onComplete: () => {
           this.history.push(this.board);
