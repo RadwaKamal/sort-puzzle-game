@@ -3,16 +3,18 @@ import { theme } from '../theme';
 import { LAYERS_PER_FLASK } from '../core/board';
 import type { Color, Flask } from '../core/board';
 
-const CORNER_RADIUS = 10;
-const LAYER_PADDING = 4;
+const LAYER_PADDING = 3;
 
 interface LiquidSegment {
   color: Color;
   height: number;
 }
 
-// Draws one flask: a glass outline plus stacked liquid layers. Index 0 in the
-// flask array is the bottom layer, matching the core board model.
+// Draws one flask: a hard drop shadow, solid dark background, stacked liquid
+// layers, and a thick white outline on top - sharp rectangular corners
+// throughout, no rounding, matching the "Arcade Potion Lab" pixel-art theme.
+// Index 0 in the flask array is the bottom layer, matching the core board
+// model.
 //
 // All "juice" motion (select lift/tilt, pour tilt, shake, squash-and-stretch)
 // animates relative to the layout position set in layout() — layoutX/layoutY
@@ -21,8 +23,10 @@ interface LiquidSegment {
 // in-flight one (e.g. deselecting mid-lift) without fighting over x/y/angle.
 export class FlaskView extends Phaser.GameObjects.Container {
   readonly index: number;
-  private readonly glass: Phaser.GameObjects.Graphics;
+  private readonly shadow: Phaser.GameObjects.Graphics;
+  private readonly background: Phaser.GameObjects.Graphics;
   private readonly liquid: Phaser.GameObjects.Graphics;
+  private readonly outline: Phaser.GameObjects.Graphics;
   private width_ = 0;
   private height_ = 0;
   private selected = false;
@@ -33,9 +37,11 @@ export class FlaskView extends Phaser.GameObjects.Container {
     super(scene);
     this.index = index;
 
-    this.glass = scene.add.graphics();
+    this.shadow = scene.add.graphics();
+    this.background = scene.add.graphics();
     this.liquid = scene.add.graphics();
-    this.add([this.liquid, this.glass]);
+    this.outline = scene.add.graphics();
+    this.add([this.shadow, this.background, this.liquid, this.outline]);
 
     this.setSize(0, 0);
     this.on('pointerdown', () => onTap(this.index));
@@ -56,12 +62,13 @@ export class FlaskView extends Phaser.GameObjects.Container {
     // are drawn centered at (0, 0). A centered hit area rect (-w/2, -h/2, w, h)
     // silently only catches the top-left quadrant of clicks; it must be (0, 0, w, h).
     this.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
-    this.drawGlass();
+    this.drawShadowAndBackground();
+    this.drawOutline();
   }
 
   setSelected(selected: boolean): void {
     this.selected = selected;
-    this.drawGlass();
+    this.drawOutline();
 
     this.scene.tweens.killTweensOf(this);
     this.scene.tweens.add({
@@ -156,18 +163,27 @@ export class FlaskView extends Phaser.GameObjects.Container {
     }
   }
 
-  private drawGlass(): void {
+  private drawShadowAndBackground(): void {
+    const w = this.width_;
+    const h = this.height_;
+    const offset = theme.flask.shadowOffset;
+
+    this.shadow.clear();
+    this.shadow.fillStyle(theme.flask.shadow, 1);
+    this.shadow.fillRect(-w / 2 + offset, -h / 2 + offset, w, h);
+
+    this.background.clear();
+    this.background.fillStyle(theme.flask.glass, theme.flask.glassAlpha);
+    this.background.fillRect(-w / 2, -h / 2, w, h);
+  }
+
+  private drawOutline(): void {
     const w = this.width_;
     const h = this.height_;
 
-    this.glass.clear();
-    this.glass.fillStyle(theme.flask.glass, theme.flask.glassAlpha);
-    this.glass.fillRoundedRect(-w / 2, -h / 2, w, h, CORNER_RADIUS);
-
-    const outlineColor = this.selected ? 0xffffff : theme.flask.outline;
-    const outlineAlpha = this.selected ? 1 : theme.flask.outlineAlpha;
-    const lineWidth = this.selected ? 4 : 2;
-    this.glass.lineStyle(lineWidth, outlineColor, outlineAlpha);
-    this.glass.strokeRoundedRect(-w / 2, -h / 2, w, h, CORNER_RADIUS);
+    this.outline.clear();
+    const color = this.selected ? theme.flask.selectedOutline : theme.flask.outline;
+    this.outline.lineStyle(theme.flask.outlineWidth, color, 1);
+    this.outline.strokeRect(-w / 2, -h / 2, w, h);
   }
 }

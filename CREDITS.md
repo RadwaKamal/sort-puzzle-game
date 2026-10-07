@@ -17,10 +17,23 @@ Credited here anyway as thanks.
 
 ## Fonts
 
-_None bundled yet — planned per CLAUDE.md (a rounded Google Font, e.g. Fredoka or Nunito)._
+| File | Source | License |
+| --- | --- | --- |
+| `public/assets/fonts/PressStart2P-Regular.ttf` | [Press Start 2P](https://github.com/google/fonts/tree/main/ofl/pressstart2p) by Cody "CodeMan38" Boisclair, via Google Fonts | [SIL Open Font License 1.1](https://scripts.sil.org/OFL) |
+
+Used throughout the UI as part of the "Arcade Potion Lab" pixel-art visual direction (chosen from
+three brainstormed directions — see project memory/session history for the others).
+
+## Visual direction
+
+The current UI (bold flat colors, thick white outlines, hard offset shadows) was inspired by
+[Kenney.nl](https://kenney.nl)'s CC0 "Pixel UI Pack" as a style reference during the brainstorm
+phase; no files from that pack are used directly — all button/flask graphics are drawn in code
+via Phaser Graphics (see `src/view/button.ts`, `src/view/FlaskView.ts`).
 
 ## App icon and splash screen
 
-Self-made (`assets/icon*.png`, `assets/splash.png`): a flat flask glyph in the game's own liquid
-colors, matching the in-game `FlaskView` art style. Not from an external source - placeholder
-quality, revisit in the planned UI/icon polish pass.
+Self-made (`assets/icon*.png`, `assets/splash.png`): a flat flask glyph, matching the in-game
+`FlaskView` art style at the time they were made. They predate the "Arcade Potion Lab" palette
+adopted later and should be regenerated to match (same liquid colors, thicker outline) next time
+the icon/splash are touched.

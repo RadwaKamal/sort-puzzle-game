@@ -1,12 +1,12 @@
 import Phaser from 'phaser';
 import { theme } from '../theme';
-import { createTextButton } from '../view/button';
+import { createButton, Button } from '../view/button';
 import { AudioService } from '../services/audio';
 
 export class SettingsScene extends Phaser.Scene {
   private audio!: AudioService;
-  private soundButton!: Phaser.GameObjects.Text;
-  private hapticsButton!: Phaser.GameObjects.Text;
+  private soundButton!: Button;
+  private hapticsButton!: Button;
 
   constructor() {
     super('Settings');
@@ -21,17 +21,18 @@ export class SettingsScene extends Phaser.Scene {
         fontFamily: theme.font.family,
         fontSize: `${theme.font.size.title}px`,
         color: '#ffffff',
+        shadow: { offsetX: 3, offsetY: 3, color: '#000000', blur: 0, fill: true },
       })
       .setOrigin(0.5);
 
-    createTextButton(this, 70, 50, '< Back', () => this.scene.start('Menu'));
+    createButton(this, 75, 50, 110, 36, '< Back', () => this.scene.start('Menu'), theme.accent.blue, '#ffffff');
 
-    this.soundButton = createTextButton(this, width / 2, height * 0.4, '', () => {
+    this.soundButton = createButton(this, width / 2, height * 0.4, 220, 52, '', () => {
       this.audio.toggleSound();
       this.updateLabels();
     });
 
-    this.hapticsButton = createTextButton(this, width / 2, height * 0.4 + 70, '', () => {
+    this.hapticsButton = createButton(this, width / 2, height * 0.4 + 70, 220, 52, '', () => {
       this.audio.toggleHaptics();
       this.updateLabels();
     });
@@ -41,7 +42,13 @@ export class SettingsScene extends Phaser.Scene {
   }
 
   private updateLabels(): void {
-    this.soundButton.setText(`Sound: ${this.audio.soundEnabled ? 'On' : 'Off'}`);
-    this.hapticsButton.setText(`Haptics: ${this.audio.hapticsEnabled ? 'On' : 'Off'}`);
+    const soundOn = this.audio.soundEnabled;
+    const hapticsOn = this.audio.hapticsEnabled;
+    this.soundButton
+      .setText(`Sound: ${soundOn ? 'On' : 'Off'}`)
+      .setAccent(soundOn ? theme.accent.green : theme.accent.pink);
+    this.hapticsButton
+      .setText(`Haptics: ${hapticsOn ? 'On' : 'Off'}`)
+      .setAccent(hapticsOn ? theme.accent.green : theme.accent.pink);
   }
 }

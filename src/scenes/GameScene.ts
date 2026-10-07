@@ -14,7 +14,7 @@ import type { Board, Color, Flask } from '../core/board';
 import { generateLevel } from '../core/generator';
 import type { Level } from '../core/generator';
 import { FlaskView } from '../view/FlaskView';
-import { createTextButton } from '../view/button';
+import { createButton, Button } from '../view/button';
 import { AudioService } from '../services/audio';
 import { saveCurrentLevel, unlockLevel } from '../services/storage';
 import { AdService } from '../services/ads';
@@ -46,11 +46,11 @@ export class GameScene extends Phaser.Scene {
 
   private flaskViews: FlaskView[] = [];
   private levelText!: Phaser.GameObjects.Text;
-  private undoButton!: Phaser.GameObjects.Text;
+  private undoButton!: Button;
   private winOverlay!: Phaser.GameObjects.Container;
   private winBackdrop!: Phaser.GameObjects.Rectangle;
   private winTitle!: Phaser.GameObjects.Text;
-  private winButton!: Phaser.GameObjects.Text;
+  private winButton!: Button;
 
   constructor() {
     super('Game');
@@ -71,19 +71,63 @@ export class GameScene extends Phaser.Scene {
         fontFamily: theme.font.family,
         fontSize: `${theme.font.size.title}px`,
         color: '#ffffff',
+        shadow: { offsetX: 3, offsetY: 3, color: '#000000', blur: 0, fill: true },
       })
       .setOrigin(0.5);
 
-    createTextButton(this, 70, 30, '< Menu', () => this.scene.start('Menu'));
-    createTextButton(this, this.scale.width / 2 - 90, 110, 'Restart', () => this.restart());
-    this.undoButton = createTextButton(this, this.scale.width / 2 + 90, 110, '', () =>
-      void this.undo(),
+    const midX = this.scale.width / 2;
+    createButton(
+      this,
+      65,
+      30,
+      110,
+      36,
+      '< Menu',
+      () => this.scene.start('Menu'),
+      theme.accent.blue,
+      '#ffffff',
     );
-    createTextButton(this, this.scale.width / 2 - 90, 170, 'Extra Flask (Ad)', () =>
-      void this.onExtraFlask(),
+    createButton(
+      this,
+      midX - 75,
+      110,
+      140,
+      40,
+      'Restart',
+      () => this.restart(),
+      theme.accent.blue,
+      '#ffffff',
     );
-    createTextButton(this, this.scale.width / 2 + 90, 170, 'Skip Level (Ad)', () =>
-      void this.onSkip(),
+    this.undoButton = createButton(
+      this,
+      midX + 75,
+      110,
+      140,
+      40,
+      '',
+      () => void this.undo(),
+      theme.accent.green,
+    );
+    createButton(
+      this,
+      midX - 80,
+      170,
+      150,
+      40,
+      'Flask (Ad)',
+      () => void this.onExtraFlask(),
+      theme.accent.yellow,
+    );
+    createButton(
+      this,
+      midX + 80,
+      170,
+      150,
+      40,
+      'Skip (Ad)',
+      () => void this.onSkip(),
+      theme.accent.pink,
+      '#ffffff',
     );
 
     this.winOverlay = this.buildWinOverlay();
@@ -104,25 +148,28 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildWinOverlay(): Phaser.GameObjects.Container {
-    this.winBackdrop = this.add.rectangle(0, 0, 0, 0, 0x000000, 0.6).setOrigin(0);
+    this.winBackdrop = this.add.rectangle(0, 0, 0, 0, 0x000000, 0.75).setOrigin(0);
     this.winTitle = this.add
-      .text(0, 0, 'Level Complete!', {
+      .text(0, 0, 'LEVEL\nCOMPLETE!', {
         fontFamily: theme.font.family,
         fontSize: `${theme.font.size.title}px`,
-        color: '#ffffff',
+        color: '#ffd23f',
+        align: 'center',
+        stroke: '#000000',
+        strokeThickness: 2,
+        shadow: { offsetX: 3, offsetY: 3, color: '#ef476f', blur: 0, fill: true },
       })
       .setOrigin(0.5);
-    this.winButton = this.add
-      .text(0, 0, 'Next Level', {
-        fontFamily: theme.font.family,
-        fontSize: `${theme.font.size.body}px`,
-        color: '#0b0c10',
-        backgroundColor: '#ffffff',
-        padding: { x: 20, y: 10 },
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => void this.nextLevel());
+    this.winButton = createButton(
+      this,
+      0,
+      0,
+      200,
+      48,
+      'Next Level',
+      () => void this.nextLevel(),
+      theme.accent.green,
+    );
 
     const container = this.add.container(0, 0, [this.winBackdrop, this.winTitle, this.winButton]);
     container.setDepth(1000);
@@ -133,8 +180,8 @@ export class GameScene extends Phaser.Scene {
   private layoutWinOverlay(): void {
     const { width, height } = this.scale;
     this.winBackdrop.setSize(width, height);
-    this.winTitle.setPosition(width / 2, height / 2 - 40);
-    this.winButton.setPosition(width / 2, height / 2 + 40);
+    this.winTitle.setPosition(width / 2, height / 2 - 60);
+    this.winButton.setPosition(width / 2, height / 2 + 55);
   }
 
   private loadLevel(levelNumber: number): void {
@@ -249,16 +296,24 @@ export class GameScene extends Phaser.Scene {
     sourceView.setSelected(false);
     this.audio.play('pour');
 
+    // Quantize the fill into chunky notches instead of a smooth tween, so the
+    // liquid visibly steps down/up pixel-by-pixel rather than sliding - a few
+    // steps per layer-unit being poured reads as blocky without looking like
+    // it's stuttering.
+    const STEPS_PER_UNIT = 5;
+    const steps = Math.max(4, Math.round(amount * STEPS_PER_UNIT));
+
     sourceView.tiltTowards(direction, () => {
       const progress = { t: 0 };
       this.tweens.add({
         targets: progress,
         t: 1,
-        duration: 260,
+        duration: 320,
         ease: 'Sine.easeInOut',
         onUpdate: () => {
-          this.renderPourFrame(sourceView, sourceBefore, true, amount, pourColor, 1 - progress.t);
-          this.renderPourFrame(targetView, targetBefore, false, amount, pourColor, progress.t);
+          const stepped = Math.floor(progress.t * steps) / steps;
+          this.renderPourFrame(sourceView, sourceBefore, true, amount, pourColor, 1 - stepped);
+          this.renderPourFrame(targetView, targetBefore, false, amount, pourColor, stepped);
         },
         onComplete: () => {
           this.history.push(this.board);
@@ -382,9 +437,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateUndoButtonLabel(): void {
-    this.undoButton.setText(
-      this.freeUndoesRemaining > 0 ? `Undo (${this.freeUndoesRemaining})` : 'Undo (Ad)',
-    );
+    const free = this.freeUndoesRemaining > 0;
+    this.undoButton
+      .setText(free ? `Undo (${this.freeUndoesRemaining})` : 'Undo (Ad)')
+      .setAccent(free ? theme.accent.green : theme.accent.pink);
   }
 
   // Adds one empty flask to the current board - always behind a rewarded ad.

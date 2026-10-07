@@ -1,39 +1,74 @@
-// All colors, fonts and sizes for the game live here so the potion theme
-// can be swapped later without touching game logic or scenes.
+// All colors, fonts and sizes for the game live here so the visual theme can
+// be swapped later without touching game logic or scenes.
+//
+// Current theme: "Arcade Potion Lab" - bold flat primaries, thick white
+// outlines, hard offset shadows, Press Start 2P. See the UI brainstorm
+// artifact from the pixel-art direction pass for the other two directions
+// that were considered (warm wood "Alchemist's Workshop" and soft glowing
+// "Moonlit Potion Garden").
 
 export const theme = {
-  background: 0x0b0c10,
+  background: 0x0d0d14,
 
-  // Up to 12 liquid colors, chosen to stay distinct for color-blind players.
-  // Each has an optional symbol for accessibility (added alongside color in the view layer).
+  // Up to 12 liquid colors, bold saturated "arcade" hues. Keeps the same
+  // red/teal/orange/blue/yellow/purple/mint/pink/olive/grey/brown/cyan hue
+  // roles as the original palette (for color-blind distinctness) but turned
+  // up to match the Arcade Potion Lab direction's punchy primaries.
   liquidColors: [
-    0xe63946, // red
-    0x2a9d8f, // teal
-    0xf4a261, // orange
-    0x457b9d, // blue
-    0xe9c46a, // yellow
-    0x9b5de5, // purple
-    0x2ec4b6, // mint
-    0xff6b9d, // pink
-    0x606c38, // olive
-    0xbdbdbd, // grey
-    0x774936, // brown
-    0x00b4d8, // cyan
+    0xef233c, // red
+    0x06d6a0, // teal
+    0xff8800, // orange
+    0x118ab2, // blue
+    0xffd23f, // yellow
+    0x8338ec, // purple
+    0x06ffa5, // mint
+    0xef476f, // pink
+    0xaacc00, // olive
+    0xc8c8d4, // grey
+    0xc1662f, // brown
+    0x00c2d1, // cyan
   ],
 
   flask: {
-    glass: 0xffffff,
-    glassAlpha: 0.12,
+    glass: 0x1a1a24, // solid dark fill, not translucent
+    glassAlpha: 1,
     outline: 0xffffff,
-    outlineAlpha: 0.35,
+    outlineAlpha: 1,
+    outlineWidth: 4,
+    selectedOutline: 0xffd23f, // yellow ring when a flask is picked up
+    shadow: 0x000000,
+    shadowOffset: 5,
+  },
+
+  // Named accent colors for buttons/panels - pick one per button by role,
+  // not by position, so the same label always reads the same color.
+  accent: {
+    yellow: 0xffd23f,
+    blue: 0x118ab2,
+    pink: 0xef476f,
+    green: 0x06d6a0,
+  },
+
+  ui: {
+    outline: 0xffffff,
+    shadow: 0x000000,
+    shadowOffset: 4,
   },
 
   font: {
-    family: 'Fredoka',
+    // Quoted: Phaser builds the canvas font string without quoting
+    // multi-word family names, and "Press Start 2P" (a space, and "2P"
+    // starting with a digit) gets silently rejected by the canvas font
+    // parser, leaving it stuck on the browser's default ("10px sans-serif")
+    // instead of erroring. Embedding the quotes here fixes every call site.
+    family: '"Press Start 2P"',
+    // Press Start 2P's glyphs are much wider per character than a normal
+    // sans/serif, so these sizes are deliberately much smaller than a
+    // typical type scale would use at this viewport size.
     size: {
-      title: 48,
-      body: 24,
-      small: 16,
+      title: 26,
+      body: 15,
+      small: 10,
     },
   },
 } as const;

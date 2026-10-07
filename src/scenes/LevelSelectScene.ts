@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { theme } from '../theme';
-import { createTextButton } from '../view/button';
+import { createButton } from '../view/button';
 import { loadProgress } from '../services/storage';
 import type { Progress } from '../services/storage';
 
@@ -29,17 +29,38 @@ export class LevelSelectScene extends Phaser.Scene {
         fontFamily: theme.font.family,
         fontSize: `${theme.font.size.title}px`,
         color: '#ffffff',
+        shadow: { offsetX: 3, offsetY: 3, color: '#000000', blur: 0, fill: true },
       })
       .setOrigin(0.5);
 
-    createTextButton(this, 70, 50, '< Back', () => this.scene.start('Menu'));
+    createButton(this, 75, 50, 110, 36, '< Back', () => this.scene.start('Menu'), theme.accent.blue, '#ffffff');
 
-    createTextButton(this, width / 2 - 110, height - 60, '< Prev', () => this.changePage(-1));
-    createTextButton(this, width / 2 + 110, height - 60, 'Next >', () => this.changePage(1));
+    createButton(
+      this,
+      width / 2 - 120,
+      height - 60,
+      110,
+      40,
+      '< Prev',
+      () => this.changePage(-1),
+      theme.accent.blue,
+      '#ffffff',
+    );
+    createButton(
+      this,
+      width / 2 + 120,
+      height - 60,
+      110,
+      40,
+      'Next >',
+      () => this.changePage(1),
+      theme.accent.blue,
+      '#ffffff',
+    );
     this.pageText = this.add
       .text(width / 2, height - 60, '', {
         fontFamily: theme.font.family,
-        fontSize: `${theme.font.size.body}px`,
+        fontSize: `${theme.font.size.small}px`,
         color: '#ffffff',
       })
       .setOrigin(0.5);
@@ -64,6 +85,7 @@ export class LevelSelectScene extends Phaser.Scene {
     const startX = width / 2 - (cellW * (COLUMNS - 1)) / 2;
     const startY = 160;
     const rowH = 90;
+    const cellSize = 56;
 
     for (let i = 0; i < LEVELS_PER_PAGE; i++) {
       const levelNumber = startLevel + i;
@@ -75,24 +97,50 @@ export class LevelSelectScene extends Phaser.Scene {
       const y = startY + row * rowH;
       const unlocked = levelNumber <= this.progress.unlockedLevel;
 
-      const button = this.add
-        .text(x, y, String(levelNumber), {
-          fontFamily: theme.font.family,
-          fontSize: `${theme.font.size.body}px`,
-          color: unlocked ? '#ffffff' : '#555566',
-          backgroundColor: unlocked ? '#ffffff22' : '#ffffff0a',
-          padding: { x: 14, y: 10 },
-        })
-        .setOrigin(0.5);
-
-      if (unlocked) {
-        button
-          .setInteractive({ useHandCursor: true })
-          .on('pointerdown', () => this.scene.start('Game', { level: levelNumber }));
-      }
-      this.gridContainer.add(button);
+      this.gridContainer.add(this.createLevelCell(x, y, cellSize, levelNumber, unlocked));
     }
 
     this.pageText.setText(`Page ${this.page + 1} / ${MAX_PAGE + 1}`);
+  }
+
+  // Lighter-weight than the shared Button (no drop shadow) so a 20-cell grid
+  // doesn't turn into a wall of shadows - still flat-colored with a crisp
+  // border to match the arcade look, just a quieter one.
+  private createLevelCell(
+    x: number,
+    y: number,
+    size: number,
+    levelNumber: number,
+    unlocked: boolean,
+  ): Phaser.GameObjects.Container {
+    const box = this.add.graphics();
+    box.fillStyle(unlocked ? theme.accent.yellow : 0x232330, 1);
+    box.fillRect(-size / 2, -size / 2, size, size);
+    box.lineStyle(2, unlocked ? theme.ui.outline : 0x3a3a48, 1);
+    box.strokeRect(-size / 2, -size / 2, size, size);
+
+    const label = this.add
+      .text(0, 0, String(levelNumber), {
+        fontFamily: theme.font.family,
+        fontSize: `${theme.font.size.small}px`,
+        color: unlocked ? '#0d0d14' : '#55556a',
+      })
+      .setOrigin(0.5);
+
+    const container = this.add.container(x, y, [box, label]);
+    container.setSize(size, size);
+
+    if (unlocked) {
+      // Phaser's Container hit test resolves local (x, y) relative to the
+      // container's top-left corner, not its center, even though box/label
+      // are drawn centered at (0, 0) above — the hit area must be (0, 0, size, size).
+      container.setInteractive(
+        new Phaser.Geom.Rectangle(0, 0, size, size),
+        Phaser.Geom.Rectangle.Contains,
+      );
+      container.on('pointerdown', () => this.scene.start('Game', { level: levelNumber }));
+    }
+
+    return container;
   }
 }
