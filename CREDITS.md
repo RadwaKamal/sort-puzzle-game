@@ -33,7 +33,6 @@ via Phaser Graphics (see `src/view/button.ts`, `src/view/FlaskView.ts`).
 
 ## App icon and splash screen
 
-Self-made (`assets/icon*.png`, `assets/splash.png`): a flat flask glyph, matching the in-game
-`FlaskView` art style at the time they were made. They predate the "Arcade Potion Lab" palette
-adopted later and should be regenerated to match (same liquid colors, thicker outline) next time
-the icon/splash are touched.
+Self-made (`assets/icon*.png`, `assets/splash.png`): a flat flask glyph matching the in-game
+`FlaskView` art style — sharp corners, thick white outline, hard offset shadow, "Arcade Potion
+Lab" palette (red/teal/orange liquid bands on a dark `#0d0d14` ground).
