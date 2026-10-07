@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { theme } from '../theme';
-import { LAYERS_PER_FLASK } from '../core/board';
+import { isFlaskSealed, LAYERS_PER_FLASK } from '../core/board';
 import type { Color, Flask } from '../core/board';
 
 const LAYER_PADDING = 3;
@@ -46,10 +46,12 @@ export class FlaskView extends Phaser.GameObjects.Container {
   private readonly background: Phaser.GameObjects.Graphics;
   private readonly liquid: Phaser.GameObjects.Graphics;
   private readonly liquidGrid: Phaser.GameObjects.TileSprite;
+  private readonly cap: Phaser.GameObjects.Graphics;
   private readonly outline: Phaser.GameObjects.Graphics;
   private width_ = 0;
   private height_ = 0;
   private selected = false;
+  private moveTween?: Phaser.Tweens.Tween;
   layoutX = 0;
   layoutY = 0;
 
@@ -63,8 +65,9 @@ export class FlaskView extends Phaser.GameObjects.Container {
     this.liquidGrid = scene.add.tileSprite(0, 0, 1, 1, ensureCubeGridTexture(scene));
     this.liquidGrid.setOrigin(0, 0);
     this.liquidGrid.setVisible(false);
+    this.cap = scene.add.graphics();
     this.outline = scene.add.graphics();
-    this.add([this.shadow, this.background, this.liquid, this.liquidGrid, this.outline]);
+    this.add([this.shadow, this.background, this.liquid, this.liquidGrid, this.cap, this.outline]);
 
     this.setSize(0, 0);
     this.on('pointerdown', () => onTap(this.index));
@@ -103,6 +106,24 @@ export class FlaskView extends Phaser.GameObjects.Container {
     this.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
     this.drawShadowAndBackground();
     this.drawOutline();
+  }
+
+  // Slides to a new home position (used to regroup sealed flasks to the
+  // front of the board) without touching size, rotation, or scale - unlike
+  // layout(), this only stops its own previous move so it can't cancel an
+  // unrelated tween (e.g. a completion squash-bounce) running at the same
+  // time on this flask.
+  slideTo(x: number, y: number, duration = 260): void {
+    this.layoutX = x;
+    this.layoutY = y;
+    this.moveTween?.stop();
+    this.moveTween = this.scene.tweens.add({
+      targets: this,
+      x,
+      y,
+      duration,
+      ease: 'Back.easeOut',
+    });
   }
 
   setSelected(selected: boolean): void {
@@ -180,6 +201,7 @@ export class FlaskView extends Phaser.GameObjects.Container {
       flask.map((color) => ({ color, height: 1 })),
       capacity,
     );
+    this.drawCap(isFlaskSealed(flask, capacity));
   }
 
   // Renders arbitrary fractional-height liquid segments bottom-to-top, used
@@ -188,6 +210,10 @@ export class FlaskView extends Phaser.GameObjects.Container {
   renderLayers(segments: LiquidSegment[], capacity = LAYERS_PER_FLASK): void {
     const innerW = this.width_ - LAYER_PADDING * 2;
     const layerH = (this.height_ - LAYER_PADDING * 2) / capacity;
+
+    // Only render() (the discrete, "settled" path) ever shows a cap - a
+    // flask being actively poured from/into mid-pour is never sealed.
+    this.drawCap(false);
 
     this.liquid.clear();
     let cursor = 0;
@@ -230,6 +256,23 @@ export class FlaskView extends Phaser.GameObjects.Container {
     this.background.clear();
     this.background.fillStyle(theme.flask.glass, theme.flask.glassAlpha);
     this.background.fillRect(-w / 2, -h / 2, w, h);
+  }
+
+  // A cork-stopper bar plugged into the top of a sealed (full, single-color)
+  // flask - echoes the app icon's cork, and tells the player at a glance
+  // this one's locked and can't be poured from anymore.
+  private drawCap(sealed: boolean): void {
+    this.cap.clear();
+    if (!sealed) return;
+
+    const innerW = this.width_ - LAYER_PADDING * 2;
+    const capH = Math.min(14, this.height_ * 0.12);
+    const topY = -this.height_ / 2 + LAYER_PADDING;
+
+    this.cap.fillStyle(0xc1662f, 1);
+    this.cap.fillRect(-innerW / 2, topY, innerW, capH);
+    this.cap.lineStyle(2, 0xffffff, 1);
+    this.cap.strokeRect(-innerW / 2, topY, innerW, capH);
   }
 
   private drawOutline(): void {

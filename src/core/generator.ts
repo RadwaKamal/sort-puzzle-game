@@ -13,19 +13,36 @@ export interface Level {
   numColors: number;
   board: Board;
   minMoves: number;
+  isHard: boolean;
 }
 
 const MIN_COLORS = 3;
 const MAX_COLORS = 12;
 const EMPTY_FLASKS = 2;
+// Hard levels get one fewer free flask than their tier would normally have -
+// same color count, noticeably less room to maneuver. Only safe up to a
+// point though: with 8+ colors, dropping to a single free flask makes a
+// random shuffle solvable so rarely that generation can't reliably find one
+// within the attempt budget (empirically ~1% or less of shuffles qualify at
+// 8 colors, ~0% at 10+) - past that cutoff hard levels keep the normal flask
+// count and lean on the raised minMoves bar instead.
+const HARD_EMPTY_FLASKS = 1;
+const HARD_FEWER_FLASKS_MAX_COLORS = 7;
 // How many level numbers it takes to ramp from MIN_COLORS to MAX_COLORS.
 const LEVELS_PER_COLOR_TIER = 20;
+// Every 3rd level is a spotlighted hard level - same color-count tier as its
+// neighbors, but tighter on space and biased toward gnarlier shuffles.
+const HARD_LEVEL_INTERVAL = 3;
 
 const MAX_GENERATION_ATTEMPTS = 500;
 
 export function colorsForLevel(levelNumber: number): number {
   const tier = Math.floor((levelNumber - 1) / LEVELS_PER_COLOR_TIER);
   return Math.min(MAX_COLORS, MIN_COLORS + tier);
+}
+
+export function isHardLevel(levelNumber: number): boolean {
+  return levelNumber % HARD_LEVEL_INTERVAL === 0;
 }
 
 // A deterministic per-attempt seed so retries are reproducible: the same
@@ -56,10 +73,13 @@ function buildCandidateBoard(rng: SeededRng, numColors: number, numFlasks: numbe
 
 export function generateLevel(levelNumber: number): Level {
   const numColors = colorsForLevel(levelNumber);
-  const numFlasks = numColors + EMPTY_FLASKS;
+  const isHard = isHardLevel(levelNumber);
+  const hardFewerFlasks = isHard && numColors <= HARD_FEWER_FLASKS_MAX_COLORS;
+  const numFlasks = numColors + (hardFewerFlasks ? HARD_EMPTY_FLASKS : EMPTY_FLASKS);
   // Require at least a few real moves so a shuffle that happens to come out
-  // nearly sorted doesn't get served up as a "level".
-  const minMoves = numColors;
+  // nearly sorted doesn't get served up as a "level". Hard levels additionally
+  // bias toward gnarlier shuffles by raising that bar.
+  const minMoves = isHard ? Math.ceil(numColors * 1.3) : numColors;
 
   for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {
     const rng = new SeededRng(seedForAttempt(levelNumber, attempt));
@@ -67,11 +87,12 @@ export function generateLevel(levelNumber: number): Level {
     const result = solve(board);
 
     if (result.solvable && !result.inconclusive && (result.moveCount ?? 0) >= minMoves) {
-      return { levelNumber, numColors, board, minMoves };
+      return { levelNumber, numColors, board, minMoves, isHard };
     }
   }
 
   throw new Error(
-    `Could not generate a solvable level ${levelNumber} after ${MAX_GENERATION_ATTEMPTS} attempts`,
+    `Could not generate a solvable level ${levelNumber} after ${MAX_GENERATION_ATTEMPTS} attempts ` +
+      `(numColors=${numColors}, numFlasks=${numFlasks}, minMoves=${minMoves}, isHard=${isHard})`,
   );
 }

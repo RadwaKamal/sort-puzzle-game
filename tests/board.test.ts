@@ -5,6 +5,7 @@ import {
   getLegalMoves,
   hashBoard,
   isBoardSolved,
+  isFlaskSealed,
   isFlaskSolved,
   pour,
   pourAmount,
@@ -40,6 +41,25 @@ describe('pourAmount / canPour', () => {
     const source = [0, 0];
     const target = [1, 1, 1, 1];
     expect(pourAmount(source, target, 4)).toBe(0);
+  });
+
+  it('refuses to pour from a sealed (full single-color) flask', () => {
+    const source = [3, 3, 3, 3];
+    const target: number[] = [];
+    expect(pourAmount(source, target, 4)).toBe(0);
+    expect(canPour(source, target, 4)).toBe(false);
+  });
+});
+
+describe('isFlaskSealed', () => {
+  it('is true only for a full single-color flask', () => {
+    expect(isFlaskSealed([3, 3, 3, 3], 4)).toBe(true);
+  });
+
+  it('is false for empty, partial, or mixed flasks', () => {
+    expect(isFlaskSealed([], 4)).toBe(false);
+    expect(isFlaskSealed([3, 3], 4)).toBe(false);
+    expect(isFlaskSealed([3, 3, 3, 4], 4)).toBe(false);
   });
 });
 

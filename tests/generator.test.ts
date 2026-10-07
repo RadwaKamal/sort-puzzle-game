@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { colorsForLevel, generateLevel } from '../src/core/generator';
+import { colorsForLevel, generateLevel, isHardLevel } from '../src/core/generator';
 import { solve } from '../src/core/solver';
 
 describe('colorsForLevel', () => {
@@ -8,6 +8,16 @@ describe('colorsForLevel', () => {
     expect(colorsForLevel(20)).toBe(3);
     expect(colorsForLevel(21)).toBe(4);
     expect(colorsForLevel(2000)).toBe(12);
+  });
+});
+
+describe('isHardLevel', () => {
+  it('flags every 3rd level as hard', () => {
+    expect(isHardLevel(3)).toBe(true);
+    expect(isHardLevel(6)).toBe(true);
+    expect(isHardLevel(1)).toBe(false);
+    expect(isHardLevel(2)).toBe(false);
+    expect(isHardLevel(4)).toBe(false);
   });
 });
 
@@ -23,6 +33,15 @@ describe('generateLevel', () => {
     const emptyFlasks = level.board.filter((flask) => flask.length === 0);
     expect(level.board.length).toBe(level.numColors + 2);
     expect(emptyFlasks.length).toBe(2);
+    expect(level.isHard).toBe(false);
+  });
+
+  it('hard levels get one fewer empty flask and are flagged', () => {
+    const level = generateLevel(21); // 21 % 3 === 0
+    const emptyFlasks = level.board.filter((flask) => flask.length === 0);
+    expect(level.isHard).toBe(true);
+    expect(level.board.length).toBe(level.numColors + 1);
+    expect(emptyFlasks.length).toBe(1);
   });
 
   it('every generated level for levels 1-200 is solvable', () => {

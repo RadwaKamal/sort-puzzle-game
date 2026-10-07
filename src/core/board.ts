@@ -27,6 +27,15 @@ export function isFlaskSolved(flask: Flask, capacity = LAYERS_PER_FLASK): boolea
   return flask.every((color) => color === flask[0]);
 }
 
+// A "sealed" flask is specifically full and single-color (unlike isFlaskSolved,
+// this excludes empty flasks) - once a flask reaches this state it holds every
+// unit of that color the level has (generation puts exactly `capacity` units
+// of each color on the board), so there's never anything left to pour it onto.
+// Sealing it off is purely a UX/legality rule, not a solvability constraint.
+export function isFlaskSealed(flask: Flask, capacity = LAYERS_PER_FLASK): boolean {
+  return isFlaskFull(flask, capacity) && flask.every((color) => color === flask[0]);
+}
+
 export function topColor(flask: Flask): Color | undefined {
   return flask[flask.length - 1];
 }
@@ -36,6 +45,10 @@ export function topColor(flask: Flask): Color | undefined {
 // color, capped by the target's remaining space.
 export function pourAmount(source: Flask, target: Flask, capacity = LAYERS_PER_FLASK): number {
   if (isFlaskEmpty(source)) return 0;
+  // A sealed source already holds all `capacity` units of its color, so
+  // there's nothing elsewhere on the board that still needs them - pouring
+  // out of it could never help solve the level, only undo progress.
+  if (isFlaskSealed(source, capacity)) return 0;
 
   const sourceTop = topColor(source) as Color;
   if (!isFlaskEmpty(target) && topColor(target) !== sourceTop) return 0;

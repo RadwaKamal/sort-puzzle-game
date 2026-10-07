@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { theme } from '../theme';
 import { createButton } from '../view/button';
+import { isHardLevel } from '../core/generator';
 import { loadProgress } from '../services/storage';
 import type { Progress } from '../services/storage';
 
@@ -97,7 +98,9 @@ export class LevelSelectScene extends Phaser.Scene {
       const y = startY + row * rowH;
       const unlocked = levelNumber <= this.progress.unlockedLevel;
 
-      this.gridContainer.add(this.createLevelCell(x, y, cellSize, levelNumber, unlocked));
+      this.gridContainer.add(
+        this.createLevelCell(x, y, cellSize, levelNumber, unlocked, isHardLevel(levelNumber)),
+      );
     }
 
     this.pageText.setText(`Page ${this.page + 1} / ${MAX_PAGE + 1}`);
@@ -105,19 +108,50 @@ export class LevelSelectScene extends Phaser.Scene {
 
   // Lighter-weight than the shared Button (no drop shadow) so a 20-cell grid
   // doesn't turn into a wall of shadows - still flat-colored with a crisp
-  // border to match the arcade look, just a quieter one.
+  // border to match the arcade look, just a quieter one. Hard levels (every
+  // 3rd) get a pink fill instead of yellow plus a small corner diamond, so
+  // they're distinguishable even for colorblind players, not just by hue.
   private createLevelCell(
     x: number,
     y: number,
     size: number,
     levelNumber: number,
     unlocked: boolean,
+    hard: boolean,
   ): Phaser.GameObjects.Container {
     const box = this.add.graphics();
-    box.fillStyle(unlocked ? theme.accent.yellow : 0x232330, 1);
+    const fill = unlocked ? (hard ? theme.accent.pink : theme.accent.yellow) : 0x232330;
+    const border = unlocked ? theme.ui.outline : hard ? 0x5a2a3a : 0x3a3a48;
+    box.fillStyle(fill, 1);
     box.fillRect(-size / 2, -size / 2, size, size);
-    box.lineStyle(2, unlocked ? theme.ui.outline : 0x3a3a48, 1);
+    box.lineStyle(2, border, 1);
     box.strokeRect(-size / 2, -size / 2, size, size);
+
+    if (hard) {
+      const bx = size / 2 - 8;
+      const by = -size / 2 + 8;
+      const r = 6;
+      box.fillStyle(0xffffff, 1);
+      box.fillPoints(
+        [
+          { x: bx, y: by - r },
+          { x: bx + r, y: by },
+          { x: bx, y: by + r },
+          { x: bx - r, y: by },
+        ],
+        true,
+      );
+      box.lineStyle(1.5, 0x0d0d14, 1);
+      box.strokePoints(
+        [
+          { x: bx, y: by - r },
+          { x: bx + r, y: by },
+          { x: bx, y: by + r },
+          { x: bx - r, y: by },
+        ],
+        true,
+      );
+    }
 
     const label = this.add
       .text(0, 0, String(levelNumber), {

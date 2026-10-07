@@ -5,6 +5,7 @@ import {
   canPour,
   isBoardSolved,
   isFlaskEmpty,
+  isFlaskSealed,
   isFlaskSolved,
   LAYERS_PER_FLASK,
   pourAmount,
@@ -39,6 +40,10 @@ export class GameScene extends Phaser.Scene {
   private level!: Level;
   private board: Board = [];
   private history: Board[] = [];
+  // Flask indices in the order they became sealed, so the front-grouping in
+  // computeDisplayOrder() is stable - a newly-sealed flask joins the end of
+  // the line instead of the whole group re-sorting on every seal.
+  private sealedOrder: number[] = [];
   private selectedIndex: number | null = null;
   private won = false;
   private animating = false;
@@ -48,6 +53,9 @@ export class GameScene extends Phaser.Scene {
 
   private flaskViews: FlaskView[] = [];
   private levelText!: Phaser.GameObjects.Text;
+  private hardBadge!: Phaser.GameObjects.Container;
+  private hardBadgeBox!: Phaser.GameObjects.Graphics;
+  private hardBadgeLabel!: Phaser.GameObjects.Text;
   private undoButton!: Button;
   private winOverlay!: Phaser.GameObjects.Container;
   private winBackdrop!: Phaser.GameObjects.Rectangle;
@@ -77,6 +85,20 @@ export class GameScene extends Phaser.Scene {
         shadow: { offsetX: 3, offsetY: 3, color: '#000000', blur: 0, fill: true },
       })
       .setOrigin(0.5);
+
+    // Small "HARD" pill shown next to the title on every 3rd level - built
+    // once here, repositioned/shown per level in loadLevel() once the title
+    // text (and therefore its width) is known.
+    this.hardBadgeBox = this.add.graphics();
+    this.hardBadgeLabel = this.add
+      .text(0, 1, 'HARD', {
+        fontFamily: theme.font.family,
+        fontSize: '9px',
+        color: '#0d0d14',
+      })
+      .setOrigin(0.5);
+    this.hardBadge = this.add.container(0, 0, [this.hardBadgeBox, this.hardBadgeLabel]);
+    this.hardBadge.setVisible(false);
 
     const midX = this.scale.width / 2;
     createButton(
@@ -222,6 +244,7 @@ export class GameScene extends Phaser.Scene {
     this.level = generateLevel(levelNumber);
     this.board = this.level.board;
     this.history = [];
+    this.sealedOrder = [];
     this.selectedIndex = null;
     this.won = false;
     this.animating = false;
@@ -230,6 +253,7 @@ export class GameScene extends Phaser.Scene {
     this.winOverlay.setVisible(false);
     this.levelText.setText(`Level ${levelNumber}`);
     void saveCurrentLevel(levelNumber);
+    this.layoutHardBadge();
 
     for (const view of this.flaskViews) {
       this.tweens.killTweensOf(view);
@@ -243,13 +267,64 @@ export class GameScene extends Phaser.Scene {
     this.relayout();
   }
 
-  private relayout(): void {
+  // Positions the "HARD" pill just to the right of the level title - must
+  // run after levelText.setText() so its measured width is current.
+  private layoutHardBadge(): void {
+    if (!this.level.isHard) {
+      this.hardBadge.setVisible(false);
+      return;
+    }
+    const badgeW = 56;
+    const badgeH = 20;
+    const x = this.levelText.x + this.levelText.width / 2 + 10 + badgeW / 2;
+    const y = this.levelText.y;
+
+    this.hardBadgeBox.clear();
+    this.hardBadgeBox.fillStyle(theme.accent.pink, 1);
+    this.hardBadgeBox.fillRect(-badgeW / 2, -badgeH / 2, badgeW, badgeH);
+    this.hardBadgeBox.lineStyle(2, theme.ui.outline, 1);
+    this.hardBadgeBox.strokeRect(-badgeW / 2, -badgeH / 2, badgeW, badgeH);
+
+    this.hardBadge.setPosition(x, y);
+    this.hardBadge.setVisible(true);
+  }
+
+  // Groups sealed (full, single-color) flasks to the front of the board so
+  // completed ones stay out of the way of whatever's still in play. Flask
+  // taps always resolve through each FlaskView's own fixed `index`, so
+  // reordering display slots here never affects move logic. The sealed group
+  // is ordered by *when* each flask sealed (oldest first), not re-sorted
+  // every call, so a newly-sealed flask joins the end of the line instead of
+  // shuffling flasks that are already sitting there.
+  private computeDisplayOrder(): number[] {
+    const nowSealed = new Set<number>();
+    this.board.forEach((flask, i) => {
+      if (isFlaskSealed(flask, LAYERS_PER_FLASK)) nowSealed.add(i);
+    });
+
+    // Drop any that got unsealed (undo) and append newly-sealed ones.
+    this.sealedOrder = this.sealedOrder.filter((i) => nowSealed.has(i));
+    for (let i = 0; i < this.board.length; i++) {
+      if (nowSealed.has(i) && !this.sealedOrder.includes(i)) this.sealedOrder.push(i);
+    }
+
+    const rest = this.board.map((_, i) => i).filter((i) => !nowSealed.has(i));
+    return [...this.sealedOrder, ...rest];
+  }
+
+  private relayout(animate = false): void {
     this.layoutWinOverlay();
+    const order = this.computeDisplayOrder();
     const slots = this.computeLayout(this.board.length);
-    this.flaskViews.forEach((view, i) => {
-      const slot = slots[i];
-      view.layout(slot.x, slot.y, slot.w, slot.h);
-      view.render(this.board[i]);
+    order.forEach((flaskIndex, slotIndex) => {
+      const slot = slots[slotIndex];
+      const view = this.flaskViews[flaskIndex];
+      if (animate) {
+        view.slideTo(slot.x, slot.y);
+      } else {
+        view.layout(slot.x, slot.y, slot.w, slot.h);
+      }
+      view.render(this.board[flaskIndex]);
     });
   }
 
@@ -289,6 +364,14 @@ export class GameScene extends Phaser.Scene {
     if (this.won || this.animating) return;
 
     if (this.selectedIndex === null) {
+      if (isFlaskSealed(this.board[index], LAYERS_PER_FLASK)) {
+        // Sealed flasks hold every unit of their color - there's never a
+        // legal pour out of one, so say so instead of silently ignoring it.
+        this.audio.play('error');
+        this.audio.haptic('error');
+        this.flaskViews[index].shake();
+        return;
+      }
       if (!isFlaskEmpty(this.board[index])) {
         this.selectedIndex = index;
         this.flaskViews[index].setSelected(true);
@@ -409,6 +492,12 @@ export class GameScene extends Phaser.Scene {
       this.spawnSparkle(targetView.layoutX, targetView.layoutY, this.board[targetIndex][0]);
       this.audio.play('complete');
       this.audio.haptic('complete');
+
+      // Slide sealed flasks to the front once the squash-bounce (~180ms) has
+      // had its moment, rather than fighting it for the same tween target.
+      this.time.delayedCall(250, () => {
+        if (!this.won) this.relayout(true);
+      });
     }
 
     this.checkWin();
@@ -482,7 +571,7 @@ export class GameScene extends Phaser.Scene {
       this.selectedIndex = null;
     }
     this.board = this.history.pop() as Board;
-    this.flaskViews.forEach((view, i) => view.render(this.board[i]));
+    this.relayout(true);
   }
 
   private updateUndoButtonLabel(): void {
