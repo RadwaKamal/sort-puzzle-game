@@ -10,10 +10,13 @@ Credited here anyway as thanks.
 | File | Source pack | Original file |
 | --- | --- | --- |
 | `public/assets/sounds/select.ogg` | [Interface Sounds](https://kenney.nl/assets/interface-sounds) | `select_001.ogg` |
-| `public/assets/sounds/pour.ogg` | [Interface Sounds](https://kenney.nl/assets/interface-sounds) | `glass_002.ogg` |
 | `public/assets/sounds/complete.ogg` | [Interface Sounds](https://kenney.nl/assets/interface-sounds) | `confirmation_002.ogg` |
 | `public/assets/sounds/error.ogg` | [Interface Sounds](https://kenney.nl/assets/interface-sounds) | `error_002.ogg` |
 | `public/assets/sounds/win.ogg` | [Music Jingles](https://kenney.nl/assets/music-jingles) | `Pizzicato jingles/jingles_PIZZI00.ogg` |
+
+Pouring uses a synthesized 8-bit "blip" (Web Audio oscillator, see `AudioService.playPourBlip`)
+instead of a sample - one blip per pixel-cube landing, pitched to a small rising arpeggio, so the
+sound matches the stepped/chunky pour animation rather than one fixed-length clip.
 
 ## Fonts
 

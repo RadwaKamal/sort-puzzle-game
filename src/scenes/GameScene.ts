@@ -410,7 +410,6 @@ export class GameScene extends Phaser.Scene {
 
     this.animating = true;
     sourceView.setSelected(false);
-    this.audio.play('pour');
 
     // Quantize the fill into chunky notches instead of a smooth tween, so the
     // liquid visibly steps down/up pixel-by-pixel rather than sliding - a few
@@ -445,6 +444,7 @@ export class GameScene extends Phaser.Scene {
             const landingY =
               targetView.layoutY + targetView.liquidTopLocalY(targetBaseUnits + amount * stepped);
             this.spawnPourCube(lipX, lipY, targetView.layoutX, landingY, pourColor);
+            this.audio.playPourBlip(stepIndex, steps);
           }
         },
         onComplete: () => {

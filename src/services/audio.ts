@@ -1,12 +1,13 @@
 import Phaser from 'phaser';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 
-export type SoundName = 'select' | 'pour' | 'complete' | 'win' | 'error';
+// Pouring has its own synthesized blip sound (see playPourBlip) rather than
+// a sample, so it isn't in this set.
+export type SoundName = 'select' | 'complete' | 'win' | 'error';
 export type HapticCue = 'select' | 'complete' | 'error' | 'win';
 
 const SOUND_FILES: Record<SoundName, string> = {
   select: 'assets/sounds/select.ogg',
-  pour: 'assets/sounds/pour.ogg',
   complete: 'assets/sounds/complete.ogg',
   win: 'assets/sounds/win.ogg',
   error: 'assets/sounds/error.ogg',
@@ -56,6 +57,46 @@ export class AudioService {
   play(name: SoundName): void {
     if (!this.soundEnabled) return;
     this.scene.sound.play(name, { volume: 0.6 });
+  }
+
+  // A short synthesized 8-bit "blip" (square-wave tone, quick rise then
+  // decay) rather than a sample - each one is cheap to generate on the fly
+  // and gives the pour its own chip-tune identity matching the pixel-cube
+  // pour animation, one blip per cube landing instead of a single sample
+  // covering the whole pour. `step`/`totalSteps` nudge the pitch upward as
+  // the pour progresses, like a little rising arpeggio.
+  playPourBlip(step: number, totalSteps: number): void {
+    if (!this.soundEnabled) return;
+    const ctx = this.webAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const progress = totalSteps > 1 ? step / (totalSteps - 1) : 0;
+    const freq = 360 + progress * 260;
+    const duration = 0.07;
+
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(freq, now);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.7, now + duration);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.14, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + duration);
+  }
+
+  // Phaser falls back to HTML5Audio (no AudioContext) on some browsers -
+  // the synthesized blip needs Web Audio specifically, so this quietly
+  // returns null there instead of throwing.
+  private webAudioContext(): AudioContext | null {
+    const manager = this.scene.sound as Phaser.Sound.WebAudioSoundManager;
+    return manager.context ?? null;
   }
 
   haptic(cue: HapticCue): void {
