@@ -5,6 +5,7 @@ import { Preferences } from '@capacitor/preferences';
 
 const CURRENT_LEVEL_KEY = 'potion-sort:current-level';
 const UNLOCKED_LEVEL_KEY = 'potion-sort:unlocked-level';
+const LEVEL_STARS_KEY = 'potion-sort:level-stars';
 
 export interface Progress {
   // The level the player should resume into from "Continue".
@@ -40,5 +41,38 @@ export async function unlockLevel(level: number): Promise<void> {
   const { unlockedLevel } = await loadProgress();
   if (level > unlockedLevel) {
     await writeNumber(UNLOCKED_LEVEL_KEY, level);
+  }
+}
+
+// Best star rating (0-3) earned per level, keyed by level number. Loaded as
+// one JSON blob rather than one Preferences key per level, so
+// LevelSelectScene can show every cell's stars with a single read instead of
+// up to 200 of them.
+export type LevelStars = Record<number, number>;
+
+export async function loadAllLevelStars(): Promise<LevelStars> {
+  const { value } = await Preferences.get({ key: LEVEL_STARS_KEY });
+  if (!value) return {};
+  try {
+    return JSON.parse(value) as LevelStars;
+  } catch {
+    // Corrupt/unexpected stored value - treat as no stars earned yet rather
+    // than throwing and blocking the level from loading.
+    return {};
+  }
+}
+
+export async function getLevelStars(level: number): Promise<number> {
+  const all = await loadAllLevelStars();
+  return all[level] ?? 0;
+}
+
+// Only writes if `stars` beats whatever's already stored for this level, so
+// a worse replay can never erase a better past result.
+export async function recordLevelStars(level: number, stars: number): Promise<void> {
+  const all = await loadAllLevelStars();
+  if (stars > (all[level] ?? 0)) {
+    all[level] = stars;
+    await Preferences.set({ key: LEVEL_STARS_KEY, value: JSON.stringify(all) });
   }
 }

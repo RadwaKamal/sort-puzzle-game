@@ -12,7 +12,13 @@ export interface Level {
   levelNumber: number;
   numColors: number;
   board: Board;
-  minMoves: number;
+  // The solver's actual move count for this specific board (not the
+  // generation-acceptance threshold below, which only bounds how easy a
+  // shuffle generation will accept - this is the real per-level par used
+  // for star scoring). The solver is a weighted best-first search, not a
+  // guaranteed-shortest-path one, so this is "a good target", not a proven
+  // optimum - see solver.ts's module comment.
+  parMoves: number;
   isHard: boolean;
 }
 
@@ -78,7 +84,9 @@ export function generateLevel(levelNumber: number): Level {
   const numFlasks = numColors + (hardFewerFlasks ? HARD_EMPTY_FLASKS : EMPTY_FLASKS);
   // Require at least a few real moves so a shuffle that happens to come out
   // nearly sorted doesn't get served up as a "level". Hard levels additionally
-  // bias toward gnarlier shuffles by raising that bar.
+  // bias toward gnarlier shuffles by raising that bar. This is purely a
+  // generation-acceptance threshold, not the returned Level's parMoves (see
+  // that field's comment) - a candidate board just has to meet or beat it.
   const minMoves = isHard ? Math.ceil(numColors * 1.3) : numColors;
 
   for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {
@@ -87,7 +95,7 @@ export function generateLevel(levelNumber: number): Level {
     const result = solve(board);
 
     if (result.solvable && !result.inconclusive && (result.moveCount ?? 0) >= minMoves) {
-      return { levelNumber, numColors, board, minMoves, isHard };
+      return { levelNumber, numColors, board, parMoves: result.moveCount as number, isHard };
     }
   }
 

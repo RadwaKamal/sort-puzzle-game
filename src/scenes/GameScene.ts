@@ -15,12 +15,14 @@ import type { Board, Color, Flask } from '../core/board';
 import { generateLevel } from '../core/generator';
 import type { Level } from '../core/generator';
 import { findHintMove } from '../core/solver';
+import { computeStars } from '../core/scoring';
 import { FlaskView } from '../view/FlaskView';
 import { createButton, Button } from '../view/button';
 import { createIconButton, drawSlidersIcon } from '../view/iconButton';
 import { drawPixelPanel } from '../view/pixelPanel';
+import { drawStar } from '../view/star';
 import { AudioService } from '../services/audio';
-import { saveCurrentLevel, unlockLevel } from '../services/storage';
+import { saveCurrentLevel, unlockLevel, recordLevelStars } from '../services/storage';
 import { AdService } from '../services/ads';
 
 const TOP_MARGIN = 220;
@@ -88,6 +90,8 @@ export class GameScene extends Phaser.Scene {
   private winOverlay!: Phaser.GameObjects.Container;
   private winBackdrop!: Phaser.GameObjects.Rectangle;
   private winTitle!: Phaser.GameObjects.Text;
+  private winStars!: Phaser.GameObjects.Graphics;
+  private winMovesText!: Phaser.GameObjects.Text;
   private winButton!: Button;
   private settingsOverlay!: Phaser.GameObjects.Container;
   private settingsBackdrop!: Phaser.GameObjects.Rectangle;
@@ -268,6 +272,18 @@ export class GameScene extends Phaser.Scene {
         shadow: { offsetX: 3, offsetY: 3, color: '#ef476f', blur: 0, fill: true },
       })
       .setOrigin(0.5);
+    // Drawn fresh per win in showWinResult() - how many of the 3 are filled
+    // depends on that level's move-efficiency rating.
+    this.winStars = this.add.graphics();
+    this.winMovesText = this.add
+      .text(0, 0, '', {
+        fontFamily: theme.font.family,
+        fontSize: `${theme.font.size.small}px`,
+        color: '#ffffff',
+        align: 'center',
+        shadow: { offsetX: 2, offsetY: 2, color: '#000000', blur: 0, fill: true },
+      })
+      .setOrigin(0.5);
     this.winButton = createButton(
       this,
       0,
@@ -279,7 +295,13 @@ export class GameScene extends Phaser.Scene {
       theme.accent.green,
     );
 
-    const container = this.add.container(0, 0, [this.winBackdrop, this.winTitle, this.winButton]);
+    const container = this.add.container(0, 0, [
+      this.winBackdrop,
+      this.winTitle,
+      this.winStars,
+      this.winMovesText,
+      this.winButton,
+    ]);
     container.setDepth(1000);
     this.layoutWinOverlay();
     return container;
@@ -288,8 +310,24 @@ export class GameScene extends Phaser.Scene {
   private layoutWinOverlay(): void {
     const { width, height } = this.scale;
     this.winBackdrop.setSize(width, height);
-    this.winTitle.setPosition(width / 2, height / 2 - 60);
-    this.winButton.setPosition(width / 2, height / 2 + 55);
+    this.winTitle.setPosition(width / 2, height / 2 - 100);
+    this.winStars.setPosition(width / 2, height / 2 - 30);
+    this.winMovesText.setPosition(width / 2, height / 2 + 15);
+    this.winButton.setPosition(width / 2, height / 2 + 70);
+  }
+
+  // Draws the 3-star row (filled vs hollow per drawStar) and the moves/par
+  // line for this specific win - called once per win, right before the
+  // overlay becomes visible, since the rating is different every time.
+  private showWinResult(stars: number, movesUsed: number, parMoves: number): void {
+    this.winStars.clear();
+    const starSize = 32;
+    const gap = 10;
+    const startX = -(starSize + gap) * 1;
+    for (let i = 0; i < 3; i++) {
+      drawStar(this.winStars, startX + i * (starSize + gap), 0, starSize, i < stars);
+    }
+    this.winMovesText.setText(`${movesUsed} moves  -  par ${parMoves}`);
   }
 
   // Small in-level settings popup (sound/haptics) opened from the gear-ish
@@ -717,6 +755,13 @@ export class GameScene extends Phaser.Scene {
   private checkWin(): void {
     if (isBoardSolved(this.board, LAYERS_PER_FLASK)) {
       this.won = true;
+      // history.length is the net move count applied so far (one push per
+      // real pour, one pop per undo) - exactly "moves used to reach this
+      // win," with undos already correctly backed out.
+      const movesUsed = this.history.length;
+      const stars = computeStars(movesUsed, this.level.parMoves);
+      this.showWinResult(stars, movesUsed, this.level.parMoves);
+      void recordLevelStars(this.levelNumber, stars);
       this.winOverlay.setVisible(true);
       this.audio.play('win');
       this.audio.haptic('win');

@@ -52,4 +52,11 @@ describe('generateLevel', () => {
       expect(result.inconclusive, `level ${levelNumber} solve() should be conclusive`).toBeFalsy();
     }
   });
+
+  it('parMoves matches the solver\'s actual move count for that exact board, not just a threshold', () => {
+    const level = generateLevel(50);
+    const result = solve(level.board);
+    expect(level.parMoves).toBe(result.moveCount);
+    expect(level.parMoves).toBeGreaterThan(0);
+  });
 });
