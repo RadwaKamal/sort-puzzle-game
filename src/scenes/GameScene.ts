@@ -53,6 +53,11 @@ export class GameScene extends Phaser.Scene {
   private ads!: AdService;
   private freeUndoesRemaining = 3;
   private freeHintsRemaining = 3;
+  // Unlike Undo/Hint (N free, then ad-gated forever after), Extra Flask is
+  // capped hard at 1 per level - an extra empty flask meaningfully eases a
+  // puzzle, so unlimited ad-gated uses would let a player trivialize any
+  // level by just watching enough ads.
+  private extraFlaskUsed = false;
 
   private flaskViews: FlaskView[] = [];
   private levelText!: Phaser.GameObjects.Text;
@@ -277,8 +282,10 @@ export class GameScene extends Phaser.Scene {
     this.animating = false;
     this.freeUndoesRemaining = 3;
     this.freeHintsRemaining = 3;
+    this.extraFlaskUsed = false;
     this.updateUndoButtonLabel();
     this.updateHintButtonLabel();
+    this.updateExtraFlaskButtonLabel();
     this.winOverlay.setVisible(false);
     this.levelText.setText(`Level ${levelNumber}`);
     void saveCurrentLevel(levelNumber);
@@ -662,13 +669,17 @@ export class GameScene extends Phaser.Scene {
     this.hapticsButton.setAccent(this.audio.hapticsEnabled ? theme.accent.green : theme.accent.pink);
   }
 
-  // Adds one empty flask to the current board - always behind a rewarded ad.
+  // Adds one empty flask to the current board - behind a rewarded ad, and
+  // capped at 1 per level (see extraFlaskUsed's comment).
   private async onExtraFlask(): Promise<void> {
-    if (this.won || this.animating) return;
+    if (this.won || this.animating || this.extraFlaskUsed) return;
     this.animating = true;
     const earned = await this.ads.showRewardedAd();
     this.animating = false;
     if (!earned || this.won) return;
+
+    this.extraFlaskUsed = true;
+    this.updateExtraFlaskButtonLabel();
 
     this.board = [...this.board, []];
     const index = this.board.length - 1;
@@ -676,6 +687,12 @@ export class GameScene extends Phaser.Scene {
     this.add.existing(view);
     this.flaskViews = [...this.flaskViews, view];
     this.relayout();
+  }
+
+  private updateExtraFlaskButtonLabel(): void {
+    this.extraFlaskButton
+      .setText(this.extraFlaskUsed ? 'Flask (Used)' : 'Flask (Ad)')
+      .setAccent(this.extraFlaskUsed ? 0x4a4a58 : theme.accent.yellow);
   }
 
   // 3 hints per level are free (same allowance/display convention as Undo);

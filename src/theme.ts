@@ -10,27 +10,27 @@
 export const theme = {
   background: 0x0d0d14,
 
-  // Up to 12 liquid colors, mostly built from 3 hue families - purple, pink,
-  // yellow - instead of a full-spectrum rainbow, interleaved (one from each
-  // family, repeated) rather than grouped, so low-color early levels always
-  // draw one of each family first instead of two near-identical purples.
-  // Within each family the hue is spread ~20-35deg apart and lightness
-  // spans dark/mid/light/very-light, since 3 families alone can't carry
-  // color-blind distinctness the way 12 spread-out hues could - value
-  // contrast is doing a lot of that work here. See the "color symbols for
-  // accessibility" gap noted in the logo/icon review artifact if this ever
-  // needs to be fully colorblind-safe.
-  // Purple family is kept to hue 268-302 (violet through magenta-purple) -
-  // an earlier "indigo" shade at hue 230 read as blue rather than purple
-  // and sat too close to the violet next to it, so nothing here dips below
-  // 268. Down to 2 purples now (plum, violet): the palest ("lavender") was
-  // swapped for a mint green early on, and "orchid" (hue 288) turned out to
-  // still read as near-identical to violet (hue 270) at a glance - swapped
-  // for a second, clearly different green (hue 135, true emerald, not the
-  // mint-teal the other green already uses) rather than adding a 3rd purple
-  // back.
+  // Up to 12 liquid colors: pink and yellow stayed full 4-shade families,
+  // but purple shrank to a single shade (violet) and green grew to 3 - see
+  // the full trail below. Interleaved (one family member at a time) rather
+  // than grouped, so low-color early levels always draw from different
+  // families first instead of two near-identical shades of one. Color-blind
+  // distinctness leans heavily on lightness/value contrast within each
+  // family, since hue alone can't carry it here - see the "color symbols
+  // for accessibility" gap noted in the logo/icon review artifact if this
+  // ever needs to be fully colorblind-safe.
+  //
+  // Purple's history: started as a 4-shade family (hue 268-302, violet
+  // through magenta-purple - nothing below 268, since an even earlier
+  // "indigo" at hue 230 read as blue, not purple). Shrank twice: "lavender"
+  // (palest) swapped for a mint green for sitting too close to the pink
+  // family; "orchid" (hue 288) swapped for a second, distinctly different
+  // green (hue 135, emerald) for reading near-identical to violet at a
+  // glance. Finally "plum" (the dark one) was dropped too, down to just
+  // "violet" - a third green (hue 150, dark forest) fills its old dark-value
+  // slot.
   liquidColors: [
-    0x4a206f, // plum (dark purple)
+    0x1b6a42, // forest (dark green)
     0xef39a3, // magenta
     0xf6a123, // amber
     0x8529e0, // violet
