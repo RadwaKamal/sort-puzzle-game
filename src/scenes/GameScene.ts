@@ -17,6 +17,7 @@ import type { Level } from '../core/generator';
 import { findHintMove } from '../core/solver';
 import { FlaskView } from '../view/FlaskView';
 import { createButton, Button } from '../view/button';
+import { createIconButton, drawSlidersIcon } from '../view/iconButton';
 import { drawPixelPanel } from '../view/pixelPanel';
 import { AudioService } from '../services/audio';
 import { saveCurrentLevel, unlockLevel } from '../services/storage';
@@ -49,6 +50,7 @@ export class GameScene extends Phaser.Scene {
   private selectedIndex: number | null = null;
   private won = false;
   private animating = false;
+  private settingsOpen = false;
   private audio!: AudioService;
   private ads!: AdService;
   private freeUndoesRemaining = 3;
@@ -71,12 +73,20 @@ export class GameScene extends Phaser.Scene {
   private undoButton!: Button;
   private extraFlaskButton!: Button;
   private hintButton!: Button;
+  private settingsButton!: Phaser.GameObjects.Container;
   private soundButton!: Button;
   private hapticsButton!: Button;
   private winOverlay!: Phaser.GameObjects.Container;
   private winBackdrop!: Phaser.GameObjects.Rectangle;
   private winTitle!: Phaser.GameObjects.Text;
   private winButton!: Button;
+  private settingsOverlay!: Phaser.GameObjects.Container;
+  private settingsBackdrop!: Phaser.GameObjects.Rectangle;
+  private settingsPanelBox!: Phaser.GameObjects.Graphics;
+  private settingsPanelBevel!: Phaser.GameObjects.Graphics;
+  private settingsPanelOutline!: Phaser.GameObjects.Graphics;
+  private settingsTitle!: Phaser.GameObjects.Text;
+  private settingsCloseButton!: Button;
 
   constructor() {
     super('Game');
@@ -167,16 +177,18 @@ export class GameScene extends Phaser.Scene {
       theme.accent.pink,
       '#ffffff',
     );
-    // Compact sound/haptics toggles, reachable without leaving the level
-    // (SettingsScene has the full "Sound: On/Off" versions) - state is shown
-    // by accent color only (green = on, pink = off), same convention as
-    // SettingsScene's toggle buttons, so the label never needs to change.
-    this.soundButton = createButton(this, 0, 0, 70, 36, 'Sound', () => this.toggleSound());
-    this.hapticsButton = createButton(this, 0, 0, 70, 36, 'Haptic', () => this.toggleHaptics());
+    // A single gear-ish icon button opens a small in-level settings popup
+    // (sound/haptics toggles) instead of two always-visible HUD buttons -
+    // SettingsScene still has the full "Sound: On/Off" versions.
+    this.settingsButton = createIconButton(this, 0, 0, 52, () => this.toggleSettings(), drawSlidersIcon);
+    this.soundButton = createButton(this, 0, 0, 200, 48, '', () => this.toggleSound());
+    this.hapticsButton = createButton(this, 0, 0, 200, 48, '', () => this.toggleHaptics());
     this.updateAudioToggleAccents();
 
     this.winOverlay = this.buildWinOverlay();
     this.winOverlay.setVisible(false);
+    this.settingsOverlay = this.buildSettingsOverlay();
+    this.settingsOverlay.setVisible(false);
 
     this.layoutControls();
     // The Scale Manager's resize event is global, not scoped to whichever
@@ -271,6 +283,98 @@ export class GameScene extends Phaser.Scene {
     this.winButton.setPosition(width / 2, height / 2 + 55);
   }
 
+  // Small in-level settings popup (sound/haptics) opened from the gear-ish
+  // HUD icon - a dim full-screen backdrop (tap to close) behind a dark
+  // pixel-art panel holding the two toggle buttons and an explicit close
+  // button, since relying on "tap outside" alone isn't always discoverable.
+  private buildSettingsOverlay(): Phaser.GameObjects.Container {
+    this.settingsBackdrop = this.add.rectangle(0, 0, 0, 0, 0x000000, 0.75).setOrigin(0);
+    this.settingsBackdrop.setInteractive();
+    this.settingsBackdrop.on('pointerdown', () => this.closeSettings());
+
+    this.settingsPanelBox = this.add.graphics();
+    this.settingsPanelBevel = this.add.graphics();
+    this.settingsPanelOutline = this.add.graphics();
+    this.settingsTitle = this.add
+      .text(0, 0, 'Settings', {
+        fontFamily: theme.font.family,
+        fontSize: `${theme.font.size.body}px`,
+        color: '#ffffff',
+        shadow: { offsetX: 2, offsetY: 2, color: '#000000', blur: 0, fill: true },
+      })
+      .setOrigin(0.5);
+    this.settingsCloseButton = createButton(
+      this,
+      0,
+      0,
+      140,
+      40,
+      'Close',
+      () => this.closeSettings(),
+      theme.accent.blue,
+      '#ffffff',
+    );
+
+    const container = this.add.container(0, 0, [
+      this.settingsBackdrop,
+      this.settingsPanelBox,
+      this.settingsPanelBevel,
+      this.settingsPanelOutline,
+      this.settingsTitle,
+      this.soundButton,
+      this.hapticsButton,
+      this.settingsCloseButton,
+    ]);
+    container.setDepth(900);
+    this.layoutSettingsOverlay();
+    return container;
+  }
+
+  private layoutSettingsOverlay(): void {
+    const { width, height } = this.scale;
+    this.settingsBackdrop.setSize(width, height);
+
+    const panelW = 260;
+    const panelH = 280;
+    const cx = width / 2;
+    const cy = height / 2;
+    drawPixelPanel(
+      {
+        shadow: this.settingsPanelBox,
+        fill: this.settingsPanelBox,
+        bevel: this.settingsPanelBevel,
+        outline: this.settingsPanelOutline,
+      },
+      panelW,
+      panelH,
+      { fillColor: theme.flask.glass, outlineColor: theme.ui.outline },
+    );
+    this.settingsPanelBox.setPosition(cx, cy);
+    this.settingsPanelBevel.setPosition(cx, cy);
+    this.settingsPanelOutline.setPosition(cx, cy);
+
+    this.settingsTitle.setPosition(cx, cy - panelH / 2 + 28);
+    this.soundButton.setPosition(cx, cy - 45);
+    this.hapticsButton.setPosition(cx, cy + 15);
+    this.settingsCloseButton.setPosition(cx, cy + panelH / 2 - 35);
+  }
+
+  private toggleSettings(): void {
+    if (this.settingsOpen) this.closeSettings();
+    else this.openSettings();
+  }
+
+  private openSettings(): void {
+    this.settingsOpen = true;
+    this.layoutSettingsOverlay();
+    this.settingsOverlay.setVisible(true);
+  }
+
+  private closeSettings(): void {
+    this.settingsOpen = false;
+    this.settingsOverlay.setVisible(false);
+  }
+
   private loadLevel(levelNumber: number): void {
     this.levelNumber = levelNumber;
     this.level = generateLevel(levelNumber);
@@ -287,6 +391,7 @@ export class GameScene extends Phaser.Scene {
     this.updateHintButtonLabel();
     this.updateExtraFlaskButtonLabel();
     this.winOverlay.setVisible(false);
+    this.closeSettings();
     this.levelText.setText(`Level ${levelNumber}`);
     void saveCurrentLevel(levelNumber);
     this.layoutHardBadge();
@@ -343,11 +448,11 @@ export class GameScene extends Phaser.Scene {
     this.undoButton.setPosition(midX + 75, 110);
     this.extraFlaskButton.setPosition(midX - 80, 170);
     this.hintButton.setPosition(midX + 80, 170);
-    this.soundButton.setPosition(width - 118, 30);
-    this.hapticsButton.setPosition(width - 40, 30);
+    this.settingsButton.setPosition(width - 46, 30);
 
     this.levelText.setX(midX);
     if (this.level) this.layoutHardBadge();
+    if (this.settingsOverlay) this.layoutSettingsOverlay();
   }
 
   // Groups sealed (full, single-color) flasks to the front of the board so
@@ -422,7 +527,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onFlaskTapped(index: number): void {
-    if (this.won || this.animating) return;
+    if (this.won || this.animating || this.settingsOpen) return;
 
     if (this.selectedIndex === null) {
       if (isFlaskSealed(this.board[index], LAYERS_PER_FLASK)) {
@@ -665,8 +770,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateAudioToggleAccents(): void {
-    this.soundButton.setAccent(this.audio.soundEnabled ? theme.accent.green : theme.accent.pink);
-    this.hapticsButton.setAccent(this.audio.hapticsEnabled ? theme.accent.green : theme.accent.pink);
+    const soundOn = this.audio.soundEnabled;
+    const hapticsOn = this.audio.hapticsEnabled;
+    this.soundButton
+      .setText(`Sound: ${soundOn ? 'On' : 'Off'}`)
+      .setAccent(soundOn ? theme.accent.green : theme.accent.pink);
+    this.hapticsButton
+      .setText(`Haptics: ${hapticsOn ? 'On' : 'Off'}`)
+      .setAccent(hapticsOn ? theme.accent.green : theme.accent.pink);
   }
 
   // Adds one empty flask to the current board - behind a rewarded ad, and
