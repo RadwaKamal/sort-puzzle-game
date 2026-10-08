@@ -5,8 +5,7 @@ import { theme } from '../theme';
 // white outline when earned, hollow dark with a dim grey outline when not,
 // matching the "white outline on everything" convention the rest of the
 // pixel-art UI uses. Draws into a caller-supplied Graphics so it can be one
-// of several stars sharing a row (the win overlay) or sit inside another
-// component's own layer stack (a future LevelSelectScene cell).
+// of several stars sharing a row (the win overlay, a LevelSelectScene cell).
 export function drawStar(
   gfx: Phaser.GameObjects.Graphics,
   cx: number,
@@ -23,8 +22,26 @@ export function drawStar(
     points.push({ x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r });
   }
 
-  gfx.fillStyle(filled ? theme.accent.yellow : 0x232330, 1);
+  gfx.fillStyle(filled ? theme.star.filled : theme.star.hollow, 1);
   gfx.fillPoints(points, true);
-  gfx.lineStyle(Math.max(1.5, size * 0.08), filled ? 0xffffff : 0x4a4a58, 1);
+  gfx.lineStyle(Math.max(1.5, size * 0.08), filled ? theme.star.filledOutline : theme.star.hollowOutline, 1);
   gfx.strokePoints(points, true);
+}
+
+// A centered row of `total` stars (the first `earned` of them filled) -
+// shared by the win overlay and LevelSelectScene cells so their sizing/
+// centering math can't drift apart from being hand-rolled twice.
+export function drawStarRow(
+  gfx: Phaser.GameObjects.Graphics,
+  cx: number,
+  cy: number,
+  starSize: number,
+  gap: number,
+  earned: number,
+  total = 3,
+): void {
+  const startX = cx - ((starSize + gap) * (total - 1)) / 2;
+  for (let i = 0; i < total; i++) {
+    drawStar(gfx, startX + i * (starSize + gap), cy, starSize, i < earned);
+  }
 }

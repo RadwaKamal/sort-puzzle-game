@@ -47,8 +47,12 @@ export async function unlockLevel(level: number): Promise<void> {
 // Best star rating (0-3) earned per level, keyed by level number. Loaded as
 // one JSON blob rather than one Preferences key per level, so
 // LevelSelectScene can show every cell's stars with a single read instead of
-// up to 200 of them.
-export type LevelStars = Record<number, number>;
+// up to 200 of them. Keyed as string, not number: JSON object keys are
+// always strings (JSON.parse can never hand back a numeric key), and typing
+// this Record<number, ...> would claim otherwise - plain numeric indexing
+// (`all[level]`) still works fine either way since JS coerces, but the
+// string type is the honest one.
+export type LevelStars = Record<string, number>;
 
 export async function loadAllLevelStars(): Promise<LevelStars> {
   const { value } = await Preferences.get({ key: LEVEL_STARS_KEY });
@@ -62,17 +66,23 @@ export async function loadAllLevelStars(): Promise<LevelStars> {
   }
 }
 
-export async function getLevelStars(level: number): Promise<number> {
-  const all = await loadAllLevelStars();
-  return all[level] ?? 0;
-}
+// Queues writes one after another rather than letting them race - without
+// this, two overlapping calls could both read the blob before either had
+// written, and the second write back would silently discard the first
+// call's update (to this level or any other). Unlikely in practice (this is
+// a single-player, turn-based game; it'd take two wins resolving within the
+// same async tick) but cheap enough to just not have the race at all.
+let writeQueue: Promise<void> = Promise.resolve();
 
 // Only writes if `stars` beats whatever's already stored for this level, so
 // a worse replay can never erase a better past result.
-export async function recordLevelStars(level: number, stars: number): Promise<void> {
-  const all = await loadAllLevelStars();
-  if (stars > (all[level] ?? 0)) {
-    all[level] = stars;
-    await Preferences.set({ key: LEVEL_STARS_KEY, value: JSON.stringify(all) });
-  }
+export function recordLevelStars(level: number, stars: number): Promise<void> {
+  writeQueue = writeQueue.then(async () => {
+    const all = await loadAllLevelStars();
+    if (stars > (all[level] ?? 0)) {
+      all[level] = stars;
+      await Preferences.set({ key: LEVEL_STARS_KEY, value: JSON.stringify(all) });
+    }
+  });
+  return writeQueue;
 }

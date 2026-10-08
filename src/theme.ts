@@ -65,6 +65,14 @@ export const theme = {
     purple: 0x8640e7,
   },
 
+  // Move-efficiency star icon (win overlay, Level Select cells).
+  star: {
+    filled: 0xffd23f, // matches accent.yellow - same gold, different token since stars are their own UI element
+    filledOutline: 0xffffff,
+    hollow: 0x232330,
+    hollowOutline: 0x4a4a58,
+  },
+
   ui: {
     outline: 0xffffff,
     shadow: 0x000000,

@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { theme } from '../theme';
 import { createButton } from '../view/button';
 import { drawPixelPanel } from '../view/pixelPanel';
-import { drawStar } from '../view/star';
+import { drawStarRow } from '../view/star';
 import { isHardLevel } from '../core/generator';
 import { loadProgress, loadAllLevelStars } from '../services/storage';
 import type { Progress, LevelStars } from '../services/storage';
@@ -128,7 +128,9 @@ export class LevelSelectScene extends Phaser.Scene {
     hard: boolean,
     starsEarned: number,
   ): Phaser.GameObjects.Container {
-    const fill = unlocked ? (hard ? theme.accent.pink : theme.accent.yellow) : 0x232330;
+    // Blue rather than yellow for normal cells - yellow is also the star
+    // icon's "earned" gold, and a gold star on a gold cell was invisible.
+    const fill = unlocked ? (hard ? theme.accent.pink : theme.accent.blue) : 0x232330;
     const border = unlocked ? theme.ui.outline : hard ? 0x5a2a3a : 0x3a3a48;
     const box = this.add.graphics();
     const bevel = this.add.graphics();
@@ -173,7 +175,10 @@ export class LevelSelectScene extends Phaser.Scene {
       .text(0, 0, String(levelNumber), {
         fontFamily: theme.font.family,
         fontSize: `${theme.font.size.small}px`,
-        color: unlocked ? '#0d0d14' : '#55556a',
+        // White rather than dark text - blue and pink (this cell's two
+        // unlocked fills) both read better with white, same as every Button
+        // elsewhere that uses these two accents.
+        color: unlocked ? '#ffffff' : '#55556a',
       })
       .setOrigin(0.5);
 
@@ -182,14 +187,9 @@ export class LevelSelectScene extends Phaser.Scene {
     // replay for a better score, which is the whole point of tracking this.
     const starsGfx = this.add.graphics();
     if (unlocked && starsEarned > 0) {
-      const miniSize = 10;
-      const gap = 2;
-      const totalW = miniSize * 3 + gap * 2;
-      const startX = -totalW / 2 + miniSize / 2;
-      const starY = size / 2 - 9;
-      for (let i = 0; i < 3; i++) {
-        drawStar(starsGfx, startX + i * (miniSize + gap), starY, miniSize, i < starsEarned);
-      }
+      // Same gold as the win overlay - now that normal cells are blue
+      // rather than yellow, gold reads fine here too.
+      drawStarRow(starsGfx, 0, size / 2 - 9, 10, 2, starsEarned);
     }
 
     const container = this.add.container(x, y, [box, bevel, outline, label, starsGfx]);

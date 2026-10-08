@@ -20,7 +20,7 @@ import { FlaskView } from '../view/FlaskView';
 import { createButton, Button } from '../view/button';
 import { createIconButton, drawSlidersIcon } from '../view/iconButton';
 import { drawPixelPanel } from '../view/pixelPanel';
-import { drawStar } from '../view/star';
+import { drawStarRow } from '../view/star';
 import { AudioService } from '../services/audio';
 import { saveCurrentLevel, unlockLevel, recordLevelStars } from '../services/storage';
 import { AdService } from '../services/ads';
@@ -321,12 +321,7 @@ export class GameScene extends Phaser.Scene {
   // overlay becomes visible, since the rating is different every time.
   private showWinResult(stars: number, movesUsed: number, parMoves: number): void {
     this.winStars.clear();
-    const starSize = 32;
-    const gap = 10;
-    const startX = -(starSize + gap) * 1;
-    for (let i = 0; i < 3; i++) {
-      drawStar(this.winStars, startX + i * (starSize + gap), 0, starSize, i < stars);
-    }
+    drawStarRow(this.winStars, 0, 0, 32, 10, stars);
     this.winMovesText.setText(`${movesUsed} moves  -  par ${parMoves}`);
   }
 
