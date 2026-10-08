@@ -62,6 +62,7 @@ export const theme = {
     blue: 0x118ab2,
     pink: 0xef476f,
     green: 0x06d6a0,
+    purple: 0x8640e7,
   },
 
   ui: {
