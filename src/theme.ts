@@ -10,23 +10,29 @@
 export const theme = {
   background: 0x0d0d14,
 
-  // Up to 12 liquid colors, bold saturated "arcade" hues. Keeps the same
-  // red/teal/orange/blue/yellow/purple/mint/pink/olive/grey/brown/cyan hue
-  // roles as the original palette (for color-blind distinctness) but turned
-  // up to match the Arcade Potion Lab direction's punchy primaries.
+  // Up to 12 liquid colors, built from 3 hue families - purple, pink,
+  // yellow - instead of a full-spectrum rainbow. Interleaved (one from each
+  // family, repeated) rather than grouped, so low-color early levels always
+  // draw one of each family first instead of two near-identical purples.
+  // Within each family the hue is spread ~20-35deg apart and lightness
+  // spans dark/mid/light/very-light, since 3 families alone can't carry
+  // color-blind distinctness the way 12 spread-out hues could - value
+  // contrast is doing a lot of that work here. See the "color symbols for
+  // accessibility" gap noted in the logo/icon review artifact if this ever
+  // needs to be fully colorblind-safe.
   liquidColors: [
-    0xef233c, // red
-    0x06d6a0, // teal
-    0xff8800, // orange
-    0x118ab2, // blue
-    0xffd23f, // yellow
-    0x8338ec, // purple
-    0x06ffa5, // mint
-    0xef476f, // pink
-    0xaacc00, // olive
-    0xc8c8d4, // grey
-    0xc1662f, // brown
-    0x00c2d1, // cyan
+    0x2040df, // indigo
+    0xef39a3, // magenta
+    0xf6a123, // amber
+    0x5c40e7, // violet
+    0xf55c94, // hot pink
+    0xffd23f, // gold (kept - matches the UI's yellow accent)
+    0xa874f1, // amethyst
+    0xf58493, // salmon
+    0xf8ec81, // lemon
+    0x292277, // deep plum
+    0x7a1f49, // wine
+    0x9c761c, // mustard
   ],
 
   flask: {
