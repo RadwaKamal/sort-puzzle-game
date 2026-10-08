@@ -10,8 +10,8 @@
 export const theme = {
   background: 0x0d0d14,
 
-  // Up to 12 liquid colors, built from 3 hue families - purple, pink,
-  // yellow - instead of a full-spectrum rainbow. Interleaved (one from each
+  // Up to 12 liquid colors, mostly built from 3 hue families - purple, pink,
+  // yellow - instead of a full-spectrum rainbow, interleaved (one from each
   // family, repeated) rather than grouped, so low-color early levels always
   // draw one of each family first instead of two near-identical purples.
   // Within each family the hue is spread ~20-35deg apart and lightness
@@ -23,7 +23,10 @@ export const theme = {
   // Purple family is kept to hue 268-302 (violet through magenta-purple) -
   // an earlier "indigo" shade at hue 230 read as blue rather than purple
   // and sat too close to the violet next to it, so nothing here dips below
-  // 268.
+  // 268. The palest purple ("lavender") was later swapped for green - it
+  // sat too close to the pink family and the palette needed a 4th family's
+  // worth of contrast more than a 4th purple - matching the UI's accent
+  // green rather than inventing an unrelated one.
   liquidColors: [
     0x4a206f, // plum (dark)
     0xef39a3, // magenta
@@ -34,7 +37,7 @@ export const theme = {
     0xcd51ec, // orchid
     0xf58493, // salmon
     0xf8ec81, // lemon
-    0xed97ed, // lavender
+    0x06d6a0, // green (replaces the too-pale lavender; matches the UI's accent green)
     0x7a1f49, // wine
     0x9c761c, // mustard
   ],
