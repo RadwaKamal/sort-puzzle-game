@@ -2,9 +2,10 @@ import Phaser from 'phaser';
 import { theme } from '../theme';
 import { createButton } from '../view/button';
 import { drawPixelPanel } from '../view/pixelPanel';
+import { drawStar } from '../view/star';
 import { isHardLevel } from '../core/generator';
-import { loadProgress } from '../services/storage';
-import type { Progress } from '../services/storage';
+import { loadProgress, loadAllLevelStars } from '../services/storage';
+import type { Progress, LevelStars } from '../services/storage';
 
 const LEVELS_PER_PAGE = 20;
 const COLUMNS = 5;
@@ -14,6 +15,7 @@ const MAX_PAGE = Math.floor((MAX_LEVEL - 1) / LEVELS_PER_PAGE);
 export class LevelSelectScene extends Phaser.Scene {
   private page = 0;
   private progress!: Progress;
+  private stars: LevelStars = {};
   private gridContainer!: Phaser.GameObjects.Container;
   private pageText!: Phaser.GameObjects.Text;
 
@@ -23,7 +25,7 @@ export class LevelSelectScene extends Phaser.Scene {
 
   async create(): Promise<void> {
     const { width, height } = this.scale;
-    this.progress = await loadProgress();
+    [this.progress, this.stars] = await Promise.all([loadProgress(), loadAllLevelStars()]);
     this.page = Math.floor((this.progress.unlockedLevel - 1) / LEVELS_PER_PAGE);
 
     this.add
@@ -104,7 +106,7 @@ export class LevelSelectScene extends Phaser.Scene {
       const unlocked = levelNumber <= this.progress.unlockedLevel;
 
       this.gridContainer.add(
-        this.createLevelCell(x, y, cellSize, levelNumber, unlocked, isHardLevel(levelNumber)),
+        this.createLevelCell(x, y, cellSize, levelNumber, unlocked, isHardLevel(levelNumber), this.stars[levelNumber] ?? 0),
       );
     }
 
@@ -124,6 +126,7 @@ export class LevelSelectScene extends Phaser.Scene {
     levelNumber: number,
     unlocked: boolean,
     hard: boolean,
+    starsEarned: number,
   ): Phaser.GameObjects.Container {
     const fill = unlocked ? (hard ? theme.accent.pink : theme.accent.yellow) : 0x232330;
     const border = unlocked ? theme.ui.outline : hard ? 0x5a2a3a : 0x3a3a48;
@@ -174,7 +177,22 @@ export class LevelSelectScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const container = this.add.container(x, y, [box, bevel, outline, label]);
+    // Best move-efficiency rating earned so far, tucked along the cell's
+    // bottom edge - a 1-star (or unstarred) cleared level visibly invites a
+    // replay for a better score, which is the whole point of tracking this.
+    const starsGfx = this.add.graphics();
+    if (unlocked && starsEarned > 0) {
+      const miniSize = 10;
+      const gap = 2;
+      const totalW = miniSize * 3 + gap * 2;
+      const startX = -totalW / 2 + miniSize / 2;
+      const starY = size / 2 - 9;
+      for (let i = 0; i < 3; i++) {
+        drawStar(starsGfx, startX + i * (miniSize + gap), starY, miniSize, i < starsEarned);
+      }
+    }
+
+    const container = this.add.container(x, y, [box, bevel, outline, label, starsGfx]);
     container.setSize(size, size);
 
     if (unlocked) {
