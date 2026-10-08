@@ -52,6 +52,7 @@ export class GameScene extends Phaser.Scene {
   private audio!: AudioService;
   private ads!: AdService;
   private freeUndoesRemaining = 3;
+  private freeHintsRemaining = 3;
 
   private flaskViews: FlaskView[] = [];
   private levelText!: Phaser.GameObjects.Text;
@@ -156,7 +157,7 @@ export class GameScene extends Phaser.Scene {
       0,
       150,
       40,
-      'Hint (Ad)',
+      '',
       () => void this.onHint(),
       theme.accent.pink,
       '#ffffff',
@@ -275,7 +276,9 @@ export class GameScene extends Phaser.Scene {
     this.won = false;
     this.animating = false;
     this.freeUndoesRemaining = 3;
+    this.freeHintsRemaining = 3;
     this.updateUndoButtonLabel();
+    this.updateHintButtonLabel();
     this.winOverlay.setVisible(false);
     this.levelText.setText(`Level ${levelNumber}`);
     void saveCurrentLevel(levelNumber);
@@ -603,7 +606,7 @@ export class GameScene extends Phaser.Scene {
 
   // 3 undos per level are free; after that, each one costs a rewarded ad.
   // `animating` doubles as a busy-flag while the ad is in flight, so a second
-  // tap on Undo/Extra Flask/Skip/Restart can't race this one.
+  // tap on Undo/Extra Flask/Hint/Restart can't race this one.
   private async undo(): Promise<void> {
     if (this.won || this.animating || this.history.length === 0) return;
 
@@ -629,6 +632,13 @@ export class GameScene extends Phaser.Scene {
     const free = this.freeUndoesRemaining > 0;
     this.undoButton
       .setText(free ? `Undo (${this.freeUndoesRemaining})` : 'Undo (Ad)')
+      .setAccent(free ? theme.accent.green : theme.accent.pink);
+  }
+
+  private updateHintButtonLabel(): void {
+    const free = this.freeHintsRemaining > 0;
+    this.hintButton
+      .setText(free ? `Hint (${this.freeHintsRemaining})` : 'Hint (Ad)')
       .setAccent(free ? theme.accent.green : theme.accent.pink);
   }
 
@@ -665,17 +675,23 @@ export class GameScene extends Phaser.Scene {
     this.relayout();
   }
 
-  // Highlights the next correct move (source -> target flask) via the
-  // solver - always behind a rewarded ad, same gating as Undo past its free
-  // allowance and Extra Flask. Purely a visual nudge: it pulses the two
-  // flasks rather than selecting/pouring them, so it can never desync from
-  // the player's own in-progress selection.
+  // 3 hints per level are free (same allowance/display convention as Undo);
+  // after that, each one costs a rewarded ad. Highlights the next correct
+  // move (source -> target flask) via the solver - purely a visual nudge,
+  // it pulses the two flasks rather than selecting/pouring them, so it can
+  // never desync from the player's own in-progress selection.
   private async onHint(): Promise<void> {
     if (this.won || this.animating) return;
-    this.animating = true;
-    const earned = await this.ads.showRewardedAd();
-    this.animating = false;
-    if (!earned) return;
+
+    if (this.freeHintsRemaining > 0) {
+      this.freeHintsRemaining--;
+    } else {
+      this.animating = true;
+      const earned = await this.ads.showRewardedAd();
+      this.animating = false;
+      if (!earned) return;
+    }
+    this.updateHintButtonLabel();
 
     const move = findHintMove(this.board);
     if (!move) return;
