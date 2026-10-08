@@ -18,14 +18,24 @@ import { findHintMove } from '../core/solver';
 import { computeStars } from '../core/scoring';
 import { FlaskView } from '../view/FlaskView';
 import { createButton, Button } from '../view/button';
-import { createIconButton, drawSlidersIcon } from '../view/iconButton';
+import {
+  createIconButton,
+  createBadgedIconButton,
+  drawSlidersIcon,
+  drawBackIcon,
+  drawRestartIcon,
+  drawUndoIcon,
+  drawFlaskIcon,
+  drawHintIcon,
+} from '../view/iconButton';
+import type { BadgedIconButton } from '../view/iconButton';
 import { drawPixelPanel } from '../view/pixelPanel';
 import { drawStarRow } from '../view/star';
 import { AudioService } from '../services/audio';
 import { saveCurrentLevel, unlockLevel, recordLevelStars } from '../services/storage';
 import { AdService } from '../services/ads';
 
-const TOP_MARGIN = 220;
+const TOP_MARGIN = 195;
 const BOTTOM_MARGIN = 40;
 const SIDE_MARGIN = 24;
 const FLASK_ASPECT = 2.2; // height / width
@@ -79,11 +89,11 @@ export class GameScene extends Phaser.Scene {
   private hardBadgeBevel!: Phaser.GameObjects.Graphics;
   private hardBadgeOutline!: Phaser.GameObjects.Graphics;
   private hardBadgeLabel!: Phaser.GameObjects.Text;
-  private menuButton!: Button;
-  private restartButton!: Button;
-  private undoButton!: Button;
-  private extraFlaskButton!: Button;
-  private hintButton!: Button;
+  private menuButton!: Phaser.GameObjects.Container;
+  private restartButton!: Phaser.GameObjects.Container;
+  private undoButton!: BadgedIconButton;
+  private extraFlaskButton!: BadgedIconButton;
+  private hintButton!: BadgedIconButton;
   private settingsButton!: Phaser.GameObjects.Container;
   private soundButton!: Button;
   private hapticsButton!: Button;
@@ -146,54 +156,24 @@ export class GameScene extends Phaser.Scene {
     ]);
     this.hardBadge.setVisible(false);
 
-    this.menuButton = createButton(
+    this.menuButton = createIconButton(this, 0, 0, 44, () => this.scene.start('Menu'), drawBackIcon, theme.accent.blue);
+    this.restartButton = createIconButton(this, 0, 0, 52, () => this.restart(), drawRestartIcon, theme.accent.blue);
+    this.undoButton = createBadgedIconButton(this, 0, 0, 56, () => void this.undo(), drawUndoIcon, theme.accent.green);
+    this.extraFlaskButton = createBadgedIconButton(
       this,
       0,
       0,
-      110,
-      36,
-      '< Menu',
-      () => this.scene.start('Menu'),
-      theme.accent.blue,
-      '#ffffff',
-    );
-    this.restartButton = createButton(
-      this,
-      0,
-      0,
-      140,
-      40,
-      'Restart',
-      () => this.restart(),
-      theme.accent.blue,
-      '#ffffff',
-    );
-    this.undoButton = createButton(this, 0, 0, 140, 40, '', () => void this.undo(), theme.accent.green);
-    this.extraFlaskButton = createButton(
-      this,
-      0,
-      0,
-      150,
-      40,
-      'Flask (Ad)',
+      56,
       () => void this.onExtraFlask(),
+      drawFlaskIcon,
       theme.accent.yellow,
     );
-    this.hintButton = createButton(
-      this,
-      0,
-      0,
-      150,
-      40,
-      '',
-      () => void this.onHint(),
-      theme.accent.pink,
-      '#ffffff',
-    );
+    this.hintButton = createBadgedIconButton(this, 0, 0, 56, () => void this.onHint(), drawHintIcon, theme.accent.pink);
     // A single gear-ish icon button opens a small in-level settings popup
     // (sound/haptics toggles) instead of two always-visible HUD buttons -
-    // SettingsScene still has the full "Sound: On/Off" versions.
-    this.settingsButton = createIconButton(this, 0, 0, 52, () => this.toggleSettings(), drawSlidersIcon);
+    // SettingsScene still has the full "Sound: On/Off" versions. Smaller
+    // than the helper row's icon buttons since it's a secondary action.
+    this.settingsButton = createIconButton(this, 0, 0, 40, () => this.toggleSettings(), drawSlidersIcon);
     this.soundButton = createButton(this, 0, 0, 200, 48, '', () => this.toggleSound());
     this.hapticsButton = createButton(this, 0, 0, 200, 48, '', () => this.toggleHaptics());
     this.updateAudioToggleAccents();
@@ -486,12 +466,25 @@ export class GameScene extends Phaser.Scene {
     const { width } = this.scale;
     const midX = width / 2;
 
-    this.menuButton.setPosition(65, 30);
-    this.restartButton.setPosition(midX - 75, 110);
-    this.undoButton.setPosition(midX + 75, 110);
-    this.extraFlaskButton.setPosition(midX - 80, 170);
-    this.hintButton.setPosition(midX + 80, 170);
-    this.settingsButton.setPosition(width - 46, 30);
+    this.menuButton.setPosition(42, 30);
+    this.settingsButton.setPosition(width - 40, 30);
+
+    // The four gameplay helpers sit in a single icon row beneath the title,
+    // evenly spaced around center - replaces the old two-row text-button
+    // layout, which ate much more vertical space on small phones.
+    const HELPER_SIZE = 56;
+    const HELPER_GAP = 14;
+    const HELPER_Y = 150;
+    const helperCount = 4;
+    const rowWidth = helperCount * HELPER_SIZE + (helperCount - 1) * HELPER_GAP;
+    let hx = midX - rowWidth / 2 + HELPER_SIZE / 2;
+    this.restartButton.setPosition(hx, HELPER_Y);
+    hx += HELPER_SIZE + HELPER_GAP;
+    this.undoButton.container.setPosition(hx, HELPER_Y);
+    hx += HELPER_SIZE + HELPER_GAP;
+    this.extraFlaskButton.container.setPosition(hx, HELPER_Y);
+    hx += HELPER_SIZE + HELPER_GAP;
+    this.hintButton.container.setPosition(hx, HELPER_Y);
 
     this.levelText.setX(midX);
     if (this.level) this.layoutHardBadge();
@@ -792,24 +785,25 @@ export class GameScene extends Phaser.Scene {
 
   private updateUndoButtonLabel(): void {
     const free = this.freeUndoesRemaining > 0;
-    this.undoButton
-      .setText(free ? `Undo (${this.freeUndoesRemaining})` : 'Undo (Ad)')
-      .setAccent(free ? theme.accent.green : theme.accent.pink);
+    const accent = free ? theme.accent.green : theme.accent.pink;
+    this.undoButton.setAccent(accent);
+    this.undoButton.setBadge(free ? String(this.freeUndoesRemaining) : 'AD', accent);
   }
 
   private updateHintButtonLabel(): void {
     if (this.hintsUsed >= MAX_HINTS_PER_LEVEL) {
       // Same muted/disabled look as Extra Flask once spent.
-      this.hintButton.setText('Hint (Max)').setAccent(0x4a4a58);
+      this.hintButton.setAccent(0x4a4a58);
+      this.hintButton.setBadge(null);
       return;
     }
     const free = this.freeHintsRemaining > 0;
-    this.hintButton
-      .setText(free ? `Hint (${this.freeHintsRemaining})` : 'Hint (Ad)')
-      // Purple rather than Undo's green for the free state - the two
-      // buttons sit right next to each other, and green would read as "the
-      // same button twice" rather than two independent counters.
-      .setAccent(free ? theme.accent.purple : theme.accent.pink);
+    // Purple rather than Undo's green for the free state - the two buttons
+    // sit right next to each other, and green would read as "the same
+    // button twice" rather than two independent counters.
+    const accent = free ? theme.accent.purple : theme.accent.pink;
+    this.hintButton.setAccent(accent);
+    this.hintButton.setBadge(free ? String(this.freeHintsRemaining) : 'AD', accent);
   }
 
   // Quick in-level toggles mirroring SettingsScene's Sound/Haptics buttons,
@@ -856,9 +850,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateExtraFlaskButtonLabel(): void {
-    this.extraFlaskButton
-      .setText(this.extraFlaskUsed ? 'Flask (Used)' : 'Flask (Ad)')
-      .setAccent(this.extraFlaskUsed ? 0x4a4a58 : theme.accent.yellow);
+    this.extraFlaskButton.setAccent(this.extraFlaskUsed ? 0x4a4a58 : theme.accent.yellow);
+    this.extraFlaskButton.setBadge(this.extraFlaskUsed ? null : 'AD', theme.accent.yellow);
   }
 
   // 1 hint per level is free (same allowance/display convention as Undo);
