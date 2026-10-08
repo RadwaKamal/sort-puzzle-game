@@ -14,6 +14,7 @@ import {
 import type { Board, Color, Flask } from '../core/board';
 import { generateLevel } from '../core/generator';
 import type { Level } from '../core/generator';
+import { findHintMove } from '../core/solver';
 import { FlaskView } from '../view/FlaskView';
 import { createButton, Button } from '../view/button';
 import { drawPixelPanel } from '../view/pixelPanel';
@@ -63,7 +64,7 @@ export class GameScene extends Phaser.Scene {
   private restartButton!: Button;
   private undoButton!: Button;
   private extraFlaskButton!: Button;
-  private skipButton!: Button;
+  private hintButton!: Button;
   private soundButton!: Button;
   private hapticsButton!: Button;
   private winOverlay!: Phaser.GameObjects.Container;
@@ -149,14 +150,14 @@ export class GameScene extends Phaser.Scene {
       () => void this.onExtraFlask(),
       theme.accent.yellow,
     );
-    this.skipButton = createButton(
+    this.hintButton = createButton(
       this,
       0,
       0,
       150,
       40,
-      'Skip (Ad)',
-      () => void this.onSkip(),
+      'Hint (Ad)',
+      () => void this.onHint(),
       theme.accent.pink,
       '#ffffff',
     );
@@ -331,7 +332,7 @@ export class GameScene extends Phaser.Scene {
     this.restartButton.setPosition(midX - 75, 110);
     this.undoButton.setPosition(midX + 75, 110);
     this.extraFlaskButton.setPosition(midX - 80, 170);
-    this.skipButton.setPosition(midX + 80, 170);
+    this.hintButton.setPosition(midX + 80, 170);
     this.soundButton.setPosition(width - 118, 30);
     this.hapticsButton.setPosition(width - 40, 30);
 
@@ -664,20 +665,25 @@ export class GameScene extends Phaser.Scene {
     this.relayout();
   }
 
-  // Skips straight to the next level - always behind a rewarded ad. Counts
-  // as a completed level for progress and the interstitial cadence, but
-  // skips the win celebration since the player didn't actually solve it.
-  private async onSkip(): Promise<void> {
+  // Highlights the next correct move (source -> target flask) via the
+  // solver - always behind a rewarded ad, same gating as Undo past its free
+  // allowance and Extra Flask. Purely a visual nudge: it pulses the two
+  // flasks rather than selecting/pouring them, so it can never desync from
+  // the player's own in-progress selection.
+  private async onHint(): Promise<void> {
     if (this.won || this.animating) return;
     this.animating = true;
     const earned = await this.ads.showRewardedAd();
-    if (!earned) {
-      this.animating = false;
-      return;
-    }
+    this.animating = false;
+    if (!earned) return;
 
-    void unlockLevel(this.levelNumber + 1);
-    await this.advanceToLevel(this.levelNumber + 1);
+    const move = findHintMove(this.board);
+    if (!move) return;
+    const [from, to] = move;
+    this.flaskViews[from].hintPulse();
+    this.flaskViews[to].hintPulse();
+    this.audio.play('select');
+    this.audio.haptic('select');
   }
 
   private restart(): void {

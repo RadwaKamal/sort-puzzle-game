@@ -1,4 +1,6 @@
-// Solvability check used by the generator to reject bad layouts.
+// Solvability check used by the generator to reject bad layouts, and the
+// hint feature's "what should I do next" lookup - both run the same search,
+// just reading a different field off the result.
 //
 // Plain BFS explores every state at each depth before going deeper, which
 // blows up combinatorially once a level has more than ~6-7 colors (branching
@@ -19,6 +21,17 @@ export interface SolveResult {
   // True if we gave up after maxStates without proving solvable or not.
   // Treat as unsolved for the purposes of level generation (reject and retry).
   inconclusive?: boolean;
+}
+
+export type Move = [from: number, to: number];
+
+interface SearchResult {
+  solvable: boolean;
+  moveCount?: number;
+  inconclusive?: boolean;
+  // The move that starts the found solution - null only when the board was
+  // already solved (0 moves needed).
+  firstMove: Move | null;
 }
 
 const DEFAULT_MAX_STATES = 100_000;
@@ -42,6 +55,11 @@ interface Node {
   board: Board;
   moves: number;
   priority: number;
+  // The move taken from the root to reach this node's branch - inherited
+  // from the parent, set fresh only on the root's direct children. Lets a
+  // solved node anywhere in the tree answer "what move should I make first"
+  // without needing parent back-pointers or a path walk.
+  firstMove: Move | null;
 }
 
 // Binary min-heap ordered by priority, so picking the next node to expand is
@@ -92,39 +110,59 @@ class MinHeap {
   }
 }
 
-export function solve(
-  board: Board,
-  capacity = LAYERS_PER_FLASK,
-  maxStates = DEFAULT_MAX_STATES,
-): SolveResult {
+function search(board: Board, capacity: number, maxStates: number): SearchResult {
   if (isBoardSolved(board, capacity)) {
-    return { solvable: true, moveCount: 0 };
+    return { solvable: true, moveCount: 0, firstMove: null };
   }
 
   const visited = new Set<string>([hashBoard(board)]);
   const open = new MinHeap();
-  open.push({ board, moves: 0, priority: heuristic(board) * HEURISTIC_WEIGHT });
+  open.push({ board, moves: 0, priority: heuristic(board) * HEURISTIC_WEIGHT, firstMove: null });
 
   while (open.size > 0) {
     if (visited.size > maxStates) {
-      return { solvable: false, inconclusive: true };
+      return { solvable: false, inconclusive: true, firstMove: null };
     }
 
     const node = open.pop();
 
-    for (const [from, to] of getLegalMoves(node.board, capacity)) {
+    for (const move of getLegalMoves(node.board, capacity)) {
+      const [from, to] = move;
       const next = applyMove(node.board, from, to, capacity);
       const key = hashBoard(next);
       if (visited.has(key)) continue;
       visited.add(key);
 
       const moves = node.moves + 1;
+      const firstMove = node.firstMove ?? move;
       if (isBoardSolved(next, capacity)) {
-        return { solvable: true, moveCount: moves };
+        return { solvable: true, moveCount: moves, firstMove };
       }
-      open.push({ board: next, moves, priority: moves + heuristic(next) * HEURISTIC_WEIGHT });
+      open.push({ board: next, moves, priority: moves + heuristic(next) * HEURISTIC_WEIGHT, firstMove });
     }
   }
 
-  return { solvable: false };
+  return { solvable: false, firstMove: null };
+}
+
+export function solve(
+  board: Board,
+  capacity = LAYERS_PER_FLASK,
+  maxStates = DEFAULT_MAX_STATES,
+): SolveResult {
+  const result = search(board, capacity, maxStates);
+  return { solvable: result.solvable, moveCount: result.moveCount, inconclusive: result.inconclusive };
+}
+
+// The move (source flask, target flask) that starts a solution from the
+// current board - used by the in-game hint button. Returns null if the
+// board is already solved or no solution could be found within maxStates.
+export function findHintMove(
+  board: Board,
+  capacity = LAYERS_PER_FLASK,
+  maxStates = DEFAULT_MAX_STATES,
+): Move | null {
+  const result = search(board, capacity, maxStates);
+  if (!result.solvable) return null;
+  return result.firstMove;
 }

@@ -188,6 +188,25 @@ export class FlaskView extends Phaser.GameObjects.Container {
     });
   }
 
+  // A gentle "look here" bounce for the hint feature - deliberately a
+  // different motion from setSelected()'s lift/tilt so a hint can never be
+  // mistaken for (or clash with) the player's own selection state, since
+  // this never touches it.
+  hintPulse(): void {
+    this.scene.tweens.killTweensOf(this);
+    this.setScale(1, 1);
+    this.scene.tweens.add({
+      targets: this,
+      scaleX: 1.12,
+      scaleY: 1.12,
+      duration: 160,
+      yoyo: true,
+      repeat: 2,
+      ease: 'Sine.easeInOut',
+      onComplete: () => this.setScale(1, 1),
+    });
+  }
+
   render(flask: Flask, capacity = LAYERS_PER_FLASK): void {
     this.renderLayers(
       flask.map((color) => ({ color, height: 1 })),
