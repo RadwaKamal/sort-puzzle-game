@@ -2,36 +2,29 @@ import Phaser from 'phaser';
 import { theme } from '../theme';
 import { isFlaskSealed, LAYERS_PER_FLASK } from '../core/board';
 import type { Color, Flask } from '../core/board';
-
-const LAYER_PADDING = 3;
-const CUBE_SIZE = 10;
-const CUBE_GRID_TEXTURE = 'liquidCubeGrid';
+import {
+  GRID_COLS,
+  GRID_ROWS,
+  LIQUID_BOTTOM_ROW,
+  LIQUID_TOP_ROW,
+  classifyCell,
+  interiorBounds,
+  rowBounds,
+} from './pixelFlask';
 
 interface LiquidSegment {
   color: Color;
   height: number;
 }
 
-// One tileable cell: a dark bevel on the bottom/right edge and a light bevel
-// on the top/left, so tiling it across a flat fill reads as a stack of small
-// cubes (like voxel-art liquid) instead of a single flat rectangle.
-function ensureCubeGridTexture(scene: Phaser.Scene): string {
-  if (scene.textures.exists(CUBE_GRID_TEXTURE)) return CUBE_GRID_TEXTURE;
-  const g = scene.add.graphics();
-  g.lineStyle(1, 0x000000, 0.25);
-  g.lineBetween(0, CUBE_SIZE - 0.5, CUBE_SIZE, CUBE_SIZE - 0.5);
-  g.lineBetween(CUBE_SIZE - 0.5, 0, CUBE_SIZE - 0.5, CUBE_SIZE);
-  g.lineStyle(1, 0xffffff, 0.18);
-  g.lineBetween(0, 0.5, CUBE_SIZE, 0.5);
-  g.lineBetween(0.5, 0, 0.5, CUBE_SIZE);
-  g.generateTexture(CUBE_GRID_TEXTURE, CUBE_SIZE, CUBE_SIZE);
-  g.destroy();
-  return CUBE_GRID_TEXTURE;
-}
-
-// Draws one flask: a hard drop shadow, solid dark background, stacked liquid
-// layers, and a thick white outline on top - sharp rectangular corners
-// throughout, no rounding, matching the "Arcade Potion Lab" pixel-art theme.
+// Draws one flask as a genuine pixel-art potion bottle: a narrow neck, a
+// staircase-tapered shoulder, a round body and a tapered rounded foot, all
+// built cell-by-cell from the shared grid profile in pixelFlask.ts rather
+// than a plain rectangle. A hard drop shadow, a dark glass cavity, a glass
+// highlight/shadow sheen and a thick pixel outline stack up to read as a
+// chunky glass bottle; liquid is drawn the same way, row by row, so it rises
+// and sits inside the exact same silhouette at any flask size.
+//
 // Index 0 in the flask array is the bottom layer, matching the core board
 // model.
 //
@@ -45,7 +38,7 @@ export class FlaskView extends Phaser.GameObjects.Container {
   private readonly shadow: Phaser.GameObjects.Graphics;
   private readonly background: Phaser.GameObjects.Graphics;
   private readonly liquid: Phaser.GameObjects.Graphics;
-  private readonly liquidGrid: Phaser.GameObjects.TileSprite;
+  private readonly glassShine: Phaser.GameObjects.Graphics;
   private readonly cap: Phaser.GameObjects.Graphics;
   private readonly outline: Phaser.GameObjects.Graphics;
   private width_ = 0;
@@ -62,12 +55,10 @@ export class FlaskView extends Phaser.GameObjects.Container {
     this.shadow = scene.add.graphics();
     this.background = scene.add.graphics();
     this.liquid = scene.add.graphics();
-    this.liquidGrid = scene.add.tileSprite(0, 0, 1, 1, ensureCubeGridTexture(scene));
-    this.liquidGrid.setOrigin(0, 0);
-    this.liquidGrid.setVisible(false);
+    this.glassShine = scene.add.graphics();
     this.cap = scene.add.graphics();
     this.outline = scene.add.graphics();
-    this.add([this.shadow, this.background, this.liquid, this.liquidGrid, this.cap, this.outline]);
+    this.add([this.shadow, this.background, this.liquid, this.glassShine, this.outline, this.cap]);
 
     this.setSize(0, 0);
     this.on('pointerdown', () => onTap(this.index));
@@ -85,8 +76,10 @@ export class FlaskView extends Phaser.GameObjects.Container {
   // amount in layer-units (fractional mid-pour). Used by GameScene to land
   // flying pour cubes exactly on the rising liquid's current top edge.
   liquidTopLocalY(units: number, capacity = LAYERS_PER_FLASK): number {
-    const layerH = (this.height_ - LAYER_PADDING * 2) / capacity;
-    return this.height_ / 2 - LAYER_PADDING - units * layerH;
+    const totalLiquidRows = LIQUID_BOTTOM_ROW - LIQUID_TOP_ROW + 1;
+    const rowsPerUnit = totalLiquidRows / capacity;
+    const cellH = this.height_ / GRID_ROWS;
+    return this.height_ / 2 - units * rowsPerUnit * cellH;
   }
 
   layout(x: number, y: number, w: number, h: number): void {
@@ -104,8 +97,7 @@ export class FlaskView extends Phaser.GameObjects.Container {
     // are drawn centered at (0, 0). A centered hit area rect (-w/2, -h/2, w, h)
     // silently only catches the top-left quadrant of clicks; it must be (0, 0, w, h).
     this.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
-    this.drawShadowAndBackground();
-    this.drawOutline();
+    this.drawShell();
   }
 
   // Slides to a new home position (used to regroup sealed flasks to the
@@ -128,7 +120,7 @@ export class FlaskView extends Phaser.GameObjects.Container {
 
   setSelected(selected: boolean): void {
     this.selected = selected;
-    this.drawOutline();
+    this.drawShell();
 
     this.scene.tweens.killTweensOf(this);
     this.scene.tweens.add({
@@ -206,82 +198,165 @@ export class FlaskView extends Phaser.GameObjects.Container {
 
   // Renders arbitrary fractional-height liquid segments bottom-to-top, used
   // mid-pour to show liquid draining from the source and filling the target
-  // in sync rather than snapping between discrete states.
+  // in sync rather than snapping between discrete states. Liquid is drawn
+  // grid-row by grid-row (4 rows per layer-unit) so even a mid-pour fraction
+  // steps down in small pixel-art notches instead of sliding smoothly.
   renderLayers(segments: LiquidSegment[], capacity = LAYERS_PER_FLASK): void {
-    const innerW = this.width_ - LAYER_PADDING * 2;
-    const layerH = (this.height_ - LAYER_PADDING * 2) / capacity;
-
-    // Only render() (the discrete, "settled" path) ever shows a cap - a
-    // flask being actively poured from/into mid-pour is never sealed.
     this.drawCap(false);
-
     this.liquid.clear();
-    let cursor = 0;
-    for (const segment of segments) {
-      if (segment.height <= 0) continue;
-      const color = theme.liquidColors[segment.color % theme.liquidColors.length];
-      const segmentHeightPx = segment.height * layerH;
-      const y = this.height_ / 2 - LAYER_PADDING - cursor * layerH - segmentHeightPx;
+
+    const totalLiquidRows = LIQUID_BOTTOM_ROW - LIQUID_TOP_ROW + 1;
+    const rowsPerUnit = totalLiquidRows / capacity;
+    const cellW = this.width_ / GRID_COLS;
+    const cellH = this.height_ / GRID_ROWS;
+
+    let cumulative = 0;
+    const segBounds = segments
+      .filter((s) => s.height > 0)
+      .map((s) => {
+        const from = cumulative;
+        cumulative += s.height * rowsPerUnit;
+        return { from, to: cumulative, color: s.color };
+      });
+    const totalRows = cumulative;
+    if (totalRows <= 0 || segBounds.length === 0) return;
+
+    const colorAt = (rowUnits: number): Color => {
+      for (const b of segBounds) {
+        if (rowUnits < b.to) return b.color;
+      }
+      return segBounds[segBounds.length - 1].color;
+    };
+
+    const fullRows = Math.min(totalLiquidRows, Math.floor(totalRows + 1e-6));
+    const frac = totalRows - fullRows;
+    const bevel = Math.min(2, cellH);
+    let topY = this.height_ / 2;
+
+    for (let r = 0; r < fullRows; r++) {
+      const gridRow = LIQUID_BOTTOM_ROW - r;
+      const interior = interiorBounds(gridRow);
+      if (!interior) continue;
+      const x0 = -this.width_ / 2 + interior.left * cellW;
+      const x1 = -this.width_ / 2 + (interior.right + 1) * cellW;
+      const y1 = this.height_ / 2 - r * cellH;
+      const y0 = y1 - cellH;
+      const color = theme.liquidColors[colorAt(r + 0.5) % theme.liquidColors.length];
       this.liquid.fillStyle(color, 1);
-      this.liquid.fillRect(-innerW / 2, y, innerW, segmentHeightPx);
-      cursor += segment.height;
+      this.liquid.fillRect(x0, y0, x1 - x0, cellH);
+      this.liquid.fillStyle(0xffffff, 0.16);
+      this.liquid.fillRect(x0, y0, x1 - x0, bevel);
+      this.liquid.fillStyle(0x000000, 0.16);
+      this.liquid.fillRect(x0, y1 - bevel, x1 - x0, bevel);
+      topY = y0;
     }
 
-    // Pixel-cube grid overlay + a 1px top "shine" line, matching the
-    // Arcade Potion Lab pixel-art direction - the liquid should read as
-    // stacked little cubes, not a flat tinted rectangle.
-    const totalPx = cursor * layerH;
-    if (totalPx > 0) {
-      const topY = this.height_ / 2 - LAYER_PADDING - totalPx;
-      this.liquid.fillStyle(0xffffff, 0.22);
-      this.liquid.fillRect(-innerW / 2, topY, innerW, Math.min(2, totalPx));
+    if (frac > 1e-3 && fullRows < totalLiquidRows) {
+      const gridRow = LIQUID_BOTTOM_ROW - fullRows;
+      const interior = interiorBounds(gridRow);
+      if (interior) {
+        const x0 = -this.width_ / 2 + interior.left * cellW;
+        const x1 = -this.width_ / 2 + (interior.right + 1) * cellW;
+        const rowBottom = this.height_ / 2 - fullRows * cellH;
+        const partialH = frac * cellH;
+        const y0 = rowBottom - partialH;
+        const color = theme.liquidColors[colorAt(fullRows + frac / 2) % theme.liquidColors.length];
+        this.liquid.fillStyle(color, 1);
+        this.liquid.fillRect(x0, y0, x1 - x0, partialH);
+        topY = y0;
+      }
+    }
 
-      this.liquidGrid.setVisible(true);
-      this.liquidGrid.setPosition(-innerW / 2, topY);
-      this.liquidGrid.setSize(innerW, totalPx);
-    } else {
-      this.liquidGrid.setVisible(false);
+    // Bright pixel shine along the very top of the liquid stack.
+    const topmostIndex = frac > 1e-3 ? fullRows : fullRows - 1;
+    if (topmostIndex >= 0) {
+      const gridRow = Math.max(LIQUID_TOP_ROW, LIQUID_BOTTOM_ROW - topmostIndex);
+      const interiorTop = interiorBounds(gridRow);
+      if (interiorTop) {
+        const x0 = -this.width_ / 2 + interiorTop.left * cellW;
+        const x1 = -this.width_ / 2 + (interiorTop.right + 1) * cellW;
+        this.liquid.fillStyle(0xffffff, 0.3);
+        this.liquid.fillRect(x0, topY, x1 - x0, bevel);
+      }
     }
   }
 
-  private drawShadowAndBackground(): void {
+  // Draws the shadow, glass cavity, glass highlight/shadow sheen and the
+  // thick pixel outline, all from the pixelFlask grid profile. Re-run on
+  // every layout() (size can change on resize/regroup) and on every
+  // setSelected() toggle (only the outline color actually changes, but
+  // redrawing the whole shell is a few hundred cheap fillRect calls on a tap
+  // - not worth caching separately).
+  private drawShell(): void {
     const w = this.width_;
     const h = this.height_;
+    const cellW = w / GRID_COLS;
+    const cellH = h / GRID_ROWS;
     const offset = theme.flask.shadowOffset;
 
     this.shadow.clear();
-    this.shadow.fillStyle(theme.flask.shadow, 1);
-    this.shadow.fillRect(-w / 2 + offset, -h / 2 + offset, w, h);
-
     this.background.clear();
+    this.glassShine.clear();
+    this.outline.clear();
+
+    this.shadow.fillStyle(theme.flask.shadow, 1);
     this.background.fillStyle(theme.flask.glass, theme.flask.glassAlpha);
-    this.background.fillRect(-w / 2, -h / 2, w, h);
+    const outlineColor = this.selected ? theme.flask.selectedOutline : theme.flask.outline;
+    this.outline.fillStyle(outlineColor, 1);
+
+    for (let row = 0; row < GRID_ROWS; row++) {
+      const bounds = rowBounds(row);
+      if (!bounds) continue;
+      const rowX0 = -w / 2 + bounds.left * cellW;
+      const rowX1 = -w / 2 + (bounds.right + 1) * cellW;
+      const y0 = -h / 2 + row * cellH;
+      this.shadow.fillRect(rowX0 + offset, y0 + offset, rowX1 - rowX0, cellH);
+
+      const interior = interiorBounds(row);
+      if (interior) {
+        const ix0 = -w / 2 + interior.left * cellW;
+        const ix1 = -w / 2 + (interior.right + 1) * cellW;
+        this.background.fillRect(ix0, y0, ix1 - ix0, cellH);
+      }
+
+      for (let col = bounds.left; col <= bounds.right; col++) {
+        const kind = classifyCell(row, col);
+        const cx0 = -w / 2 + col * cellW;
+        if (kind === 'outline') {
+          this.outline.fillRect(cx0, y0, cellW, cellH);
+        } else if (kind === 'highlight') {
+          this.glassShine.fillStyle(0xffffff, 0.22);
+          this.glassShine.fillRect(cx0, y0, cellW, cellH);
+        } else if (kind === 'shadow') {
+          this.glassShine.fillStyle(0x000000, 0.22);
+          this.glassShine.fillRect(cx0, y0, cellW, cellH);
+        }
+      }
+    }
   }
 
-  // A cork-stopper bar plugged into the top of a sealed (full, single-color)
+  // A cork-stopper bar plugged into the neck of a sealed (full, single-color)
   // flask - echoes the app icon's cork, and tells the player at a glance
   // this one's locked and can't be poured from anymore.
   private drawCap(sealed: boolean): void {
     this.cap.clear();
     if (!sealed) return;
 
-    const innerW = this.width_ - LAYER_PADDING * 2;
-    const capH = Math.min(14, this.height_ * 0.12);
-    const topY = -this.height_ / 2 + LAYER_PADDING;
+    const cellW = this.width_ / GRID_COLS;
+    const cellH = this.height_ / GRID_ROWS;
+    const neck = rowBounds(0)!;
+    const x0 = -this.width_ / 2 + neck.left * cellW;
+    const x1 = -this.width_ / 2 + (neck.right + 1) * cellW;
+    const capH = cellH * 2.2;
+    const bevel = Math.min(2, capH);
+    const y1 = -this.height_ / 2 + cellH * 0.6;
+    const y0 = y1 - capH;
 
     this.cap.fillStyle(0xc1662f, 1);
-    this.cap.fillRect(-innerW / 2, topY, innerW, capH);
-    this.cap.lineStyle(2, 0xffffff, 1);
-    this.cap.strokeRect(-innerW / 2, topY, innerW, capH);
-  }
-
-  private drawOutline(): void {
-    const w = this.width_;
-    const h = this.height_;
-
-    this.outline.clear();
-    const color = this.selected ? theme.flask.selectedOutline : theme.flask.outline;
-    this.outline.lineStyle(theme.flask.outlineWidth, color, 1);
-    this.outline.strokeRect(-w / 2, -h / 2, w, h);
+    this.cap.fillRect(x0, y0, x1 - x0, capH);
+    this.cap.fillStyle(0xffffff, 0.5);
+    this.cap.fillRect(x0, y0, x1 - x0, bevel);
+    this.cap.lineStyle(2, theme.flask.outline, 1);
+    this.cap.strokeRect(x0, y0, x1 - x0, capH);
   }
 }
