@@ -27,6 +27,11 @@ const TOP_MARGIN = 220;
 const BOTTOM_MARGIN = 40;
 const SIDE_MARGIN = 24;
 const FLASK_ASPECT = 2.2; // height / width
+// Hard ceiling on hints per level, free or ad-gated - unlike Undo (which
+// only undoes the player's own moves) a hint just hands over the answer, so
+// leaving it ad-unlimited would let a player solve any level without
+// thinking at all past the free allowance. 3 free + 2 more via ads.
+const MAX_HINTS_PER_LEVEL = 5;
 const PARTICLE_TEXTURE = 'particle';
 const POUR_CUBE_TEXTURE = 'pourCube';
 const POUR_CUBE_SIZE = 18;
@@ -55,10 +60,14 @@ export class GameScene extends Phaser.Scene {
   private ads!: AdService;
   private freeUndoesRemaining = 3;
   private freeHintsRemaining = 3;
-  // Unlike Undo/Hint (N free, then ad-gated forever after), Extra Flask is
-  // capped hard at 1 per level - an extra empty flask meaningfully eases a
-  // puzzle, so unlimited ad-gated uses would let a player trivialize any
-  // level by just watching enough ads.
+  // Total hints used this level (free + ad-gated combined), capped at
+  // MAX_HINTS_PER_LEVEL - see that constant's comment.
+  private hintsUsed = 0;
+  // Unlike Undo (N free, then ad-gated forever after - undoing your own
+  // moves never makes the puzzle itself easier), Extra Flask is capped hard
+  // at 1 per level - an extra empty flask meaningfully eases a puzzle, so
+  // unlimited ad-gated uses would let a player trivialize any level by just
+  // watching enough ads.
   private extraFlaskUsed = false;
 
   private flaskViews: FlaskView[] = [];
@@ -386,6 +395,7 @@ export class GameScene extends Phaser.Scene {
     this.animating = false;
     this.freeUndoesRemaining = 3;
     this.freeHintsRemaining = 3;
+    this.hintsUsed = 0;
     this.extraFlaskUsed = false;
     this.updateUndoButtonLabel();
     this.updateHintButtonLabel();
@@ -748,6 +758,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateHintButtonLabel(): void {
+    if (this.hintsUsed >= MAX_HINTS_PER_LEVEL) {
+      // Same muted/disabled look as Extra Flask once spent.
+      this.hintButton.setText('Hint (Max)').setAccent(0x4a4a58);
+      return;
+    }
     const free = this.freeHintsRemaining > 0;
     this.hintButton
       .setText(free ? `Hint (${this.freeHintsRemaining})` : 'Hint (Ad)')
@@ -807,12 +822,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   // 3 hints per level are free (same allowance/display convention as Undo);
-  // after that, each one costs a rewarded ad. Highlights the next correct
-  // move (source -> target flask) via the solver - purely a visual nudge,
-  // it pulses the two flasks rather than selecting/pouring them, so it can
+  // after that, each one costs a rewarded ad, up to MAX_HINTS_PER_LEVEL
+  // total - unlike Undo/Extra Flask, ads don't lift the cap entirely, since
+  // a hint just hands over the answer. Highlights the next correct move
+  // (source -> target flask) via the solver - purely a visual nudge, it
+  // pulses the two flasks rather than selecting/pouring them, so it can
   // never desync from the player's own in-progress selection.
   private async onHint(): Promise<void> {
-    if (this.won || this.animating) return;
+    if (this.won || this.animating || this.hintsUsed >= MAX_HINTS_PER_LEVEL) return;
 
     if (this.freeHintsRemaining > 0) {
       this.freeHintsRemaining--;
@@ -822,6 +839,7 @@ export class GameScene extends Phaser.Scene {
       this.animating = false;
       if (!earned) return;
     }
+    this.hintsUsed++;
     this.updateHintButtonLabel();
 
     const move = findHintMove(this.board);
