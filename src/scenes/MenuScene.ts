@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { theme } from '../theme';
 import { createButton } from '../view/button';
+import { createBoltMark } from '../view/boltMark';
 import { loadProgress } from '../services/storage';
 
 export class MenuScene extends Phaser.Scene {
@@ -11,8 +12,10 @@ export class MenuScene extends Phaser.Scene {
   async create(): Promise<void> {
     const { width, height } = this.scale;
 
+    createBoltMark(this, 110).setPosition(width / 2, height * 0.14);
+
     this.add
-      .text(width / 2, height * 0.25, 'POTION\nSORT', {
+      .text(width / 2, height * 0.27, 'POTION\nSORT', {
         fontFamily: theme.font.family,
         fontSize: '34px',
         color: '#ffd23f',
