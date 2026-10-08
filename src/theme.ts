@@ -23,21 +23,23 @@ export const theme = {
   // Purple family is kept to hue 268-302 (violet through magenta-purple) -
   // an earlier "indigo" shade at hue 230 read as blue rather than purple
   // and sat too close to the violet next to it, so nothing here dips below
-  // 268. The palest purple ("lavender") was later swapped for green - it
-  // sat too close to the pink family and the palette needed a 4th family's
-  // worth of contrast more than a 4th purple - matching the UI's accent
-  // green rather than inventing an unrelated one.
+  // 268. Down to 2 purples now (plum, violet): the palest ("lavender") was
+  // swapped for a mint green early on, and "orchid" (hue 288) turned out to
+  // still read as near-identical to violet (hue 270) at a glance - swapped
+  // for a second, clearly different green (hue 135, true emerald, not the
+  // mint-teal the other green already uses) rather than adding a 3rd purple
+  // back.
   liquidColors: [
-    0x4a206f, // plum (dark)
+    0x4a206f, // plum (dark purple)
     0xef39a3, // magenta
     0xf6a123, // amber
     0x8529e0, // violet
     0xf55c94, // hot pink
     0xffd23f, // gold (kept - matches the UI's yellow accent)
-    0xcd51ec, // orchid
+    0x25d050, // emerald
     0xf58493, // salmon
     0xf8ec81, // lemon
-    0x06d6a0, // green (replaces the too-pale lavender; matches the UI's accent green)
+    0x06d6a0, // mint green
     0x7a1f49, // wine
     0x9c761c, // mustard
   ],

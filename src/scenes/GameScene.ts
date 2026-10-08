@@ -639,7 +639,10 @@ export class GameScene extends Phaser.Scene {
     const free = this.freeHintsRemaining > 0;
     this.hintButton
       .setText(free ? `Hint (${this.freeHintsRemaining})` : 'Hint (Ad)')
-      .setAccent(free ? theme.accent.green : theme.accent.pink);
+      // Blue rather than Undo's green for the free state - the two buttons
+      // sit right next to each other, and green would read as "the same
+      // button twice" rather than two independent counters.
+      .setAccent(free ? theme.accent.blue : theme.accent.pink);
   }
 
   // Quick in-level toggles mirroring SettingsScene's Sound/Haptics buttons,
