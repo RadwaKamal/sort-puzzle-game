@@ -38,7 +38,11 @@ export class SettingsScene extends Phaser.Scene {
     });
 
     this.updateLabels();
-    this.scale.on('resize', () => this.scene.restart());
+    // See MenuScene's identical comment: must unsubscribe on shutdown or
+    // this listener outlives the scene and keeps firing in the background.
+    const onResize = () => this.scene.restart();
+    this.scale.on('resize', onResize);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off('resize', onResize));
   }
 
   private updateLabels(): void {

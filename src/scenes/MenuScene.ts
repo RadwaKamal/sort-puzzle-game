@@ -67,6 +67,13 @@ export class MenuScene extends Phaser.Scene {
       '#ffffff',
     );
 
-    this.scale.on('resize', () => this.scene.restart());
+    // The Scale Manager's resize event is global, not scoped to whichever
+    // scene is active - without unsubscribing on shutdown, this listener
+    // would outlive the scene (every stopped scene still restarting itself
+    // in the background on every future resize, bleeding onto whatever
+    // scene is actually showing).
+    const onResize = () => this.scene.restart();
+    this.scale.on('resize', onResize);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off('resize', onResize));
   }
 }

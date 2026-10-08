@@ -59,7 +59,13 @@ export class GameScene extends Phaser.Scene {
   private hardBadgeBevel!: Phaser.GameObjects.Graphics;
   private hardBadgeOutline!: Phaser.GameObjects.Graphics;
   private hardBadgeLabel!: Phaser.GameObjects.Text;
+  private menuButton!: Button;
+  private restartButton!: Button;
   private undoButton!: Button;
+  private extraFlaskButton!: Button;
+  private skipButton!: Button;
+  private soundButton!: Button;
+  private hapticsButton!: Button;
   private winOverlay!: Phaser.GameObjects.Container;
   private winBackdrop!: Phaser.GameObjects.Rectangle;
   private winTitle!: Phaser.GameObjects.Text;
@@ -110,11 +116,10 @@ export class GameScene extends Phaser.Scene {
     ]);
     this.hardBadge.setVisible(false);
 
-    const midX = this.scale.width / 2;
-    createButton(
+    this.menuButton = createButton(
       this,
-      65,
-      30,
+      0,
+      0,
       110,
       36,
       '< Menu',
@@ -122,10 +127,10 @@ export class GameScene extends Phaser.Scene {
       theme.accent.blue,
       '#ffffff',
     );
-    createButton(
+    this.restartButton = createButton(
       this,
-      midX - 75,
-      110,
+      0,
+      0,
       140,
       40,
       'Restart',
@@ -133,30 +138,21 @@ export class GameScene extends Phaser.Scene {
       theme.accent.blue,
       '#ffffff',
     );
-    this.undoButton = createButton(
+    this.undoButton = createButton(this, 0, 0, 140, 40, '', () => void this.undo(), theme.accent.green);
+    this.extraFlaskButton = createButton(
       this,
-      midX + 75,
-      110,
-      140,
-      40,
-      '',
-      () => void this.undo(),
-      theme.accent.green,
-    );
-    createButton(
-      this,
-      midX - 80,
-      170,
+      0,
+      0,
       150,
       40,
       'Flask (Ad)',
       () => void this.onExtraFlask(),
       theme.accent.yellow,
     );
-    createButton(
+    this.skipButton = createButton(
       this,
-      midX + 80,
-      170,
+      0,
+      0,
       150,
       40,
       'Skip (Ad)',
@@ -164,11 +160,30 @@ export class GameScene extends Phaser.Scene {
       theme.accent.pink,
       '#ffffff',
     );
+    // Compact sound/haptics toggles, reachable without leaving the level
+    // (SettingsScene has the full "Sound: On/Off" versions) - state is shown
+    // by accent color only (green = on, pink = off), same convention as
+    // SettingsScene's toggle buttons, so the label never needs to change.
+    this.soundButton = createButton(this, 0, 0, 70, 36, 'Sound', () => this.toggleSound());
+    this.hapticsButton = createButton(this, 0, 0, 70, 36, 'Haptic', () => this.toggleHaptics());
+    this.updateAudioToggleAccents();
 
     this.winOverlay = this.buildWinOverlay();
     this.winOverlay.setVisible(false);
 
-    this.scale.on('resize', () => this.relayout());
+    this.layoutControls();
+    // The Scale Manager's resize event is global, not scoped to whichever
+    // scene is active - without unsubscribing on shutdown, this listener
+    // would outlive the scene (every stopped GameScene still re-laying-out
+    // in the background on every future resize, bleeding onto whatever
+    // scene is actually showing - see also the identical fix in Menu/
+    // LevelSelect/SettingsScene).
+    const onResize = () => {
+      this.layoutControls();
+      this.relayout();
+    };
+    this.scale.on('resize', onResize);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off('resize', onResize));
 
     this.loadLevel(this.levelNumber);
   }
@@ -298,6 +313,30 @@ export class GameScene extends Phaser.Scene {
 
     this.hardBadge.setPosition(x, y);
     this.hardBadge.setVisible(true);
+  }
+
+  // Positions every fixed-chrome control (title, badge, top button row) from
+  // the current scale - called once in create() and again on every resize,
+  // since Phaser's RESIZE scale mode means `this.scale.width` can change
+  // after a device rotation or a desktop window resize while this scene is
+  // already live. Previously only the flask grid re-ran this math on resize
+  // (via relayout()); the button row stayed anchored to whatever width was
+  // current at create() time, so a mid-level resize could leave it
+  // off-center or clipped - this fixes that.
+  private layoutControls(): void {
+    const { width } = this.scale;
+    const midX = width / 2;
+
+    this.menuButton.setPosition(65, 30);
+    this.restartButton.setPosition(midX - 75, 110);
+    this.undoButton.setPosition(midX + 75, 110);
+    this.extraFlaskButton.setPosition(midX - 80, 170);
+    this.skipButton.setPosition(midX + 80, 170);
+    this.soundButton.setPosition(width - 118, 30);
+    this.hapticsButton.setPosition(width - 40, 30);
+
+    this.levelText.setX(midX);
+    if (this.level) this.layoutHardBadge();
   }
 
   // Groups sealed (full, single-color) flasks to the front of the board so
@@ -590,6 +629,23 @@ export class GameScene extends Phaser.Scene {
     this.undoButton
       .setText(free ? `Undo (${this.freeUndoesRemaining})` : 'Undo (Ad)')
       .setAccent(free ? theme.accent.green : theme.accent.pink);
+  }
+
+  // Quick in-level toggles mirroring SettingsScene's Sound/Haptics buttons,
+  // so the player doesn't have to leave the level to mute either one.
+  private toggleSound(): void {
+    this.audio.toggleSound();
+    this.updateAudioToggleAccents();
+  }
+
+  private toggleHaptics(): void {
+    this.audio.toggleHaptics();
+    this.updateAudioToggleAccents();
+  }
+
+  private updateAudioToggleAccents(): void {
+    this.soundButton.setAccent(this.audio.soundEnabled ? theme.accent.green : theme.accent.pink);
+    this.hapticsButton.setAccent(this.audio.hapticsEnabled ? theme.accent.green : theme.accent.pink);
   }
 
   // Adds one empty flask to the current board - always behind a rewarded ad.
