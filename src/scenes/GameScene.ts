@@ -16,6 +16,7 @@ import { generateLevel } from '../core/generator';
 import type { Level } from '../core/generator';
 import { FlaskView } from '../view/FlaskView';
 import { createButton, Button } from '../view/button';
+import { drawPixelPanel } from '../view/pixelPanel';
 import { AudioService } from '../services/audio';
 import { saveCurrentLevel, unlockLevel } from '../services/storage';
 import { AdService } from '../services/ads';
@@ -55,6 +56,8 @@ export class GameScene extends Phaser.Scene {
   private levelText!: Phaser.GameObjects.Text;
   private hardBadge!: Phaser.GameObjects.Container;
   private hardBadgeBox!: Phaser.GameObjects.Graphics;
+  private hardBadgeBevel!: Phaser.GameObjects.Graphics;
+  private hardBadgeOutline!: Phaser.GameObjects.Graphics;
   private hardBadgeLabel!: Phaser.GameObjects.Text;
   private undoButton!: Button;
   private winOverlay!: Phaser.GameObjects.Container;
@@ -90,6 +93,8 @@ export class GameScene extends Phaser.Scene {
     // once here, repositioned/shown per level in loadLevel() once the title
     // text (and therefore its width) is known.
     this.hardBadgeBox = this.add.graphics();
+    this.hardBadgeBevel = this.add.graphics();
+    this.hardBadgeOutline = this.add.graphics();
     this.hardBadgeLabel = this.add
       .text(0, 1, 'HARD', {
         fontFamily: theme.font.family,
@@ -97,7 +102,12 @@ export class GameScene extends Phaser.Scene {
         color: '#0d0d14',
       })
       .setOrigin(0.5);
-    this.hardBadge = this.add.container(0, 0, [this.hardBadgeBox, this.hardBadgeLabel]);
+    this.hardBadge = this.add.container(0, 0, [
+      this.hardBadgeBox,
+      this.hardBadgeBevel,
+      this.hardBadgeOutline,
+      this.hardBadgeLabel,
+    ]);
     this.hardBadge.setVisible(false);
 
     const midX = this.scale.width / 2;
@@ -279,11 +289,12 @@ export class GameScene extends Phaser.Scene {
     const x = this.levelText.x + this.levelText.width / 2 + 10 + badgeW / 2;
     const y = this.levelText.y;
 
-    this.hardBadgeBox.clear();
-    this.hardBadgeBox.fillStyle(theme.accent.pink, 1);
-    this.hardBadgeBox.fillRect(-badgeW / 2, -badgeH / 2, badgeW, badgeH);
-    this.hardBadgeBox.lineStyle(2, theme.ui.outline, 1);
-    this.hardBadgeBox.strokeRect(-badgeW / 2, -badgeH / 2, badgeW, badgeH);
+    drawPixelPanel(
+      { shadow: this.hardBadgeBox, fill: this.hardBadgeBox, bevel: this.hardBadgeBevel, outline: this.hardBadgeOutline },
+      badgeW,
+      badgeH,
+      { fillColor: theme.accent.pink, outlineColor: theme.ui.outline },
+    );
 
     this.hardBadge.setPosition(x, y);
     this.hardBadge.setVisible(true);

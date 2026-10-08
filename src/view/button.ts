@@ -1,13 +1,17 @@
 import Phaser from 'phaser';
 import { theme } from '../theme';
+import { drawPixelPanel } from './pixelPanel';
 
-// A chunky arcade-style button: hard offset shadow, thick white border, flat
-// accent fill, Press Start 2P label. Built as a small Container (shadow +
-// box + text) rather than a plain Text object, since a real border/shadow
-// needs actual drawn shapes, not CSS-ish text styling.
+// A chunky pixel-art button: hard offset shadow, flat accent fill, a glass-
+// style bevel sheen and a thick chamfered-corner outline (see pixelPanel.ts),
+// topped with a Press Start 2P label. Built as a small Container (four
+// Graphics layers + text) rather than a plain Text object, since a real
+// border/shadow/bevel needs actual drawn shapes, not CSS-ish text styling.
 export class Button extends Phaser.GameObjects.Container {
   private readonly shadowGfx: Phaser.GameObjects.Graphics;
-  private readonly boxGfx: Phaser.GameObjects.Graphics;
+  private readonly fillGfx: Phaser.GameObjects.Graphics;
+  private readonly bevelGfx: Phaser.GameObjects.Graphics;
+  private readonly outlineGfx: Phaser.GameObjects.Graphics;
   private readonly label: Phaser.GameObjects.Text;
   private readonly boxW: number;
   private readonly boxH: number;
@@ -28,7 +32,9 @@ export class Button extends Phaser.GameObjects.Container {
     this.boxH = h;
 
     this.shadowGfx = scene.add.graphics();
-    this.boxGfx = scene.add.graphics();
+    this.fillGfx = scene.add.graphics();
+    this.bevelGfx = scene.add.graphics();
+    this.outlineGfx = scene.add.graphics();
     this.label = scene.add
       .text(0, 0, text.toUpperCase(), {
         fontFamily: theme.font.family,
@@ -39,7 +45,7 @@ export class Button extends Phaser.GameObjects.Container {
       })
       .setOrigin(0.5);
 
-    this.add([this.shadowGfx, this.boxGfx, this.label]);
+    this.add([this.shadowGfx, this.fillGfx, this.bevelGfx, this.outlineGfx, this.label]);
     this.drawBox(accent);
 
     this.setSize(w, h);
@@ -52,17 +58,17 @@ export class Button extends Phaser.GameObjects.Container {
   }
 
   private drawBox(accent: number): void {
-    const offset = theme.ui.shadowOffset;
-
-    this.shadowGfx.clear();
-    this.shadowGfx.fillStyle(theme.ui.shadow, 1);
-    this.shadowGfx.fillRect(-this.boxW / 2 + offset, -this.boxH / 2 + offset, this.boxW, this.boxH);
-
-    this.boxGfx.clear();
-    this.boxGfx.fillStyle(accent, 1);
-    this.boxGfx.fillRect(-this.boxW / 2, -this.boxH / 2, this.boxW, this.boxH);
-    this.boxGfx.lineStyle(3, theme.ui.outline, 1);
-    this.boxGfx.strokeRect(-this.boxW / 2, -this.boxH / 2, this.boxW, this.boxH);
+    drawPixelPanel(
+      { shadow: this.shadowGfx, fill: this.fillGfx, bevel: this.bevelGfx, outline: this.outlineGfx },
+      this.boxW,
+      this.boxH,
+      {
+        fillColor: accent,
+        outlineColor: theme.ui.outline,
+        shadowColor: theme.ui.shadow,
+        shadowOffset: theme.ui.shadowOffset,
+      },
+    );
   }
 
   setText(text: string): this {

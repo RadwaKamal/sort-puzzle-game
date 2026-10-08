@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { theme } from '../theme';
 import { createButton } from '../view/button';
+import { drawPixelPanel } from '../view/pixelPanel';
 import { isHardLevel } from '../core/generator';
 import { loadProgress } from '../services/storage';
 import type { Progress } from '../services/storage';
@@ -26,7 +27,7 @@ export class LevelSelectScene extends Phaser.Scene {
     this.page = Math.floor((this.progress.unlockedLevel - 1) / LEVELS_PER_PAGE);
 
     this.add
-      .text(width / 2, 50, 'Select Level', {
+      .text(width / 2, 72, 'Select Level', {
         fontFamily: theme.font.family,
         fontSize: `${theme.font.size.title}px`,
         color: '#ffffff',
@@ -34,7 +35,7 @@ export class LevelSelectScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    createButton(this, 75, 50, 110, 36, '< Back', () => this.scene.start('Menu'), theme.accent.blue, '#ffffff');
+    createButton(this, 65, 30, 110, 36, '< Back', () => this.scene.start('Menu'), theme.accent.blue, '#ffffff');
 
     createButton(
       this,
@@ -107,10 +108,11 @@ export class LevelSelectScene extends Phaser.Scene {
   }
 
   // Lighter-weight than the shared Button (no drop shadow) so a 20-cell grid
-  // doesn't turn into a wall of shadows - still flat-colored with a crisp
-  // border to match the arcade look, just a quieter one. Hard levels (every
-  // 3rd) get a pink fill instead of yellow plus a small corner diamond, so
-  // they're distinguishable even for colorblind players, not just by hue.
+  // doesn't turn into a wall of shadows - still a chamfered pixel-art panel
+  // (via drawPixelPanel) to match the arcade look, just a quieter one. Hard
+  // levels (every 3rd) get a pink fill instead of yellow plus a small corner
+  // diamond, so they're distinguishable even for colorblind players, not
+  // just by hue.
   private createLevelCell(
     x: number,
     y: number,
@@ -119,20 +121,27 @@ export class LevelSelectScene extends Phaser.Scene {
     unlocked: boolean,
     hard: boolean,
   ): Phaser.GameObjects.Container {
-    const box = this.add.graphics();
     const fill = unlocked ? (hard ? theme.accent.pink : theme.accent.yellow) : 0x232330;
     const border = unlocked ? theme.ui.outline : hard ? 0x5a2a3a : 0x3a3a48;
-    box.fillStyle(fill, 1);
-    box.fillRect(-size / 2, -size / 2, size, size);
-    box.lineStyle(2, border, 1);
-    box.strokeRect(-size / 2, -size / 2, size, size);
+    const box = this.add.graphics();
+    const bevel = this.add.graphics();
+    const outline = this.add.graphics();
+    // No shadowColor is passed, so drawPixelPanel never touches the "shadow"
+    // layer - reusing `box` there instead of allocating a throwaway Graphics
+    // object is safe and avoids 20 empty objects sitting in the scene.
+    drawPixelPanel(
+      { shadow: box, fill: box, bevel, outline },
+      size,
+      size,
+      { fillColor: fill, outlineColor: border, highlightAlpha: unlocked ? 0.22 : 0.08 },
+    );
 
     if (hard) {
       const bx = size / 2 - 8;
       const by = -size / 2 + 8;
       const r = 6;
-      box.fillStyle(0xffffff, 1);
-      box.fillPoints(
+      outline.fillStyle(0xffffff, 1);
+      outline.fillPoints(
         [
           { x: bx, y: by - r },
           { x: bx + r, y: by },
@@ -141,8 +150,8 @@ export class LevelSelectScene extends Phaser.Scene {
         ],
         true,
       );
-      box.lineStyle(1.5, 0x0d0d14, 1);
-      box.strokePoints(
+      outline.lineStyle(1.5, 0x0d0d14, 1);
+      outline.strokePoints(
         [
           { x: bx, y: by - r },
           { x: bx + r, y: by },
@@ -161,7 +170,7 @@ export class LevelSelectScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const container = this.add.container(x, y, [box, label]);
+    const container = this.add.container(x, y, [box, bevel, outline, label]);
     container.setSize(size, size);
 
     if (unlocked) {

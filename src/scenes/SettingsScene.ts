@@ -17,7 +17,7 @@ export class SettingsScene extends Phaser.Scene {
     const { width, height } = this.scale;
 
     this.add
-      .text(width / 2, 50, 'Settings', {
+      .text(width / 2, 72, 'Settings', {
         fontFamily: theme.font.family,
         fontSize: `${theme.font.size.title}px`,
         color: '#ffffff',
@@ -25,7 +25,7 @@ export class SettingsScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    createButton(this, 75, 50, 110, 36, '< Back', () => this.scene.start('Menu'), theme.accent.blue, '#ffffff');
+    createButton(this, 65, 30, 110, 36, '< Back', () => this.scene.start('Menu'), theme.accent.blue, '#ffffff');
 
     this.soundButton = createButton(this, width / 2, height * 0.4, 220, 52, '', () => {
       this.audio.toggleSound();
