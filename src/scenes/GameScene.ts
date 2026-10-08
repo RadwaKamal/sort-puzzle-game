@@ -30,8 +30,8 @@ const FLASK_ASPECT = 2.2; // height / width
 // Hard ceiling on hints per level, free or ad-gated - unlike Undo (which
 // only undoes the player's own moves) a hint just hands over the answer, so
 // leaving it ad-unlimited would let a player solve any level without
-// thinking at all past the free allowance. 3 free + 2 more via ads.
-const MAX_HINTS_PER_LEVEL = 5;
+// thinking at all past the free allowance. 1 free + 2 more via ads.
+const MAX_HINTS_PER_LEVEL = 3;
 const PARTICLE_TEXTURE = 'particle';
 const POUR_CUBE_TEXTURE = 'pourCube';
 const POUR_CUBE_SIZE = 18;
@@ -59,7 +59,7 @@ export class GameScene extends Phaser.Scene {
   private audio!: AudioService;
   private ads!: AdService;
   private freeUndoesRemaining = 3;
-  private freeHintsRemaining = 3;
+  private freeHintsRemaining = 1;
   // Total hints used this level (free + ad-gated combined), capped at
   // MAX_HINTS_PER_LEVEL - see that constant's comment.
   private hintsUsed = 0;
@@ -394,7 +394,7 @@ export class GameScene extends Phaser.Scene {
     this.won = false;
     this.animating = false;
     this.freeUndoesRemaining = 3;
-    this.freeHintsRemaining = 3;
+    this.freeHintsRemaining = 1;
     this.hintsUsed = 0;
     this.extraFlaskUsed = false;
     this.updateUndoButtonLabel();
@@ -821,7 +821,7 @@ export class GameScene extends Phaser.Scene {
       .setAccent(this.extraFlaskUsed ? 0x4a4a58 : theme.accent.yellow);
   }
 
-  // 3 hints per level are free (same allowance/display convention as Undo);
+  // 1 hint per level is free (same allowance/display convention as Undo);
   // after that, each one costs a rewarded ad, up to MAX_HINTS_PER_LEVEL
   // total - unlike Undo/Extra Flask, ads don't lift the cap entirely, since
   // a hint just hands over the answer. Highlights the next correct move
