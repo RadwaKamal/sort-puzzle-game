@@ -20,17 +20,21 @@ export const theme = {
   // contrast is doing a lot of that work here. See the "color symbols for
   // accessibility" gap noted in the logo/icon review artifact if this ever
   // needs to be fully colorblind-safe.
+  // Purple family is kept to hue 268-302 (violet through magenta-purple) -
+  // an earlier "indigo" shade at hue 230 read as blue rather than purple
+  // and sat too close to the violet next to it, so nothing here dips below
+  // 268.
   liquidColors: [
-    0x2040df, // indigo
+    0x4a206f, // plum (dark)
     0xef39a3, // magenta
     0xf6a123, // amber
-    0x5c40e7, // violet
+    0x8529e0, // violet
     0xf55c94, // hot pink
     0xffd23f, // gold (kept - matches the UI's yellow accent)
-    0xa874f1, // amethyst
+    0xcd51ec, // orchid
     0xf58493, // salmon
     0xf8ec81, // lemon
-    0x292277, // deep plum
+    0xed97ed, // lavender
     0x7a1f49, // wine
     0x9c761c, // mustard
   ],
