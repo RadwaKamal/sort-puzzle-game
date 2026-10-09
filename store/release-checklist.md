@@ -5,6 +5,8 @@ again before actually submitting, since Google updates these periodically.
 
 ## 1. Developer account
 
+- **Developer name**: "Sparkvial Games" - chosen to match the app's own branding (the bolt/spark
+  mark + potion theme) rather than an unrelated company name.
 - One-time **$25 USD registration fee** (Mastercard, Visa, Amex, Discover US, or Visa Electron
   outside the US — prepaid cards not accepted).
 - **Identity verification**: valid government ID and a credit card, both under the same legal
