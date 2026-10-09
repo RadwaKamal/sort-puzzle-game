@@ -6,6 +6,7 @@ import { Preferences } from '@capacitor/preferences';
 const CURRENT_LEVEL_KEY = 'potion-sort:current-level';
 const UNLOCKED_LEVEL_KEY = 'potion-sort:unlocked-level';
 const LEVEL_STARS_KEY = 'potion-sort:level-stars';
+const SEEN_TOOLTIPS_KEY = 'potion-sort:seen-tooltips';
 
 export interface Progress {
   // The level the player should resume into from "Continue".
@@ -85,4 +86,35 @@ export function recordLevelStars(level: number, stars: number): Promise<void> {
     }
   });
   return writeQueue;
+}
+
+// Whether the player has already dismissed the one-time explainer for a
+// given level twist (HARD/frozen/locked) - same one-JSON-blob shape as
+// LevelStars, for the same reason (one read, not N Preferences keys).
+export type TooltipId = 'hard' | 'frozen' | 'locked';
+type SeenTooltips = Partial<Record<TooltipId, boolean>>;
+
+export async function loadSeenTooltips(): Promise<SeenTooltips> {
+  const { value } = await Preferences.get({ key: SEEN_TOOLTIPS_KEY });
+  if (!value) return {};
+  try {
+    return JSON.parse(value) as SeenTooltips;
+  } catch {
+    return {};
+  }
+}
+
+// Separate queue from level-stars' writeQueue - unrelated data, no reason to
+// serialize one behind the other.
+let tooltipWriteQueue: Promise<void> = Promise.resolve();
+
+export function markTooltipSeen(id: TooltipId): Promise<void> {
+  tooltipWriteQueue = tooltipWriteQueue.then(async () => {
+    const all = await loadSeenTooltips();
+    if (!all[id]) {
+      all[id] = true;
+      await Preferences.set({ key: SEEN_TOOLTIPS_KEY, value: JSON.stringify(all) });
+    }
+  });
+  return tooltipWriteQueue;
 }

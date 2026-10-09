@@ -31,7 +31,14 @@ import type { BadgedIconButton } from '../view/iconButton';
 import { drawPixelPanel } from '../view/pixelPanel';
 import { drawStarRow } from '../view/star';
 import { AudioService } from '../services/audio';
-import { saveCurrentLevel, unlockLevel, recordLevelStars } from '../services/storage';
+import {
+  saveCurrentLevel,
+  unlockLevel,
+  recordLevelStars,
+  loadSeenTooltips,
+  markTooltipSeen,
+} from '../services/storage';
+import type { TooltipId } from '../services/storage';
 import { AdService } from '../services/ads';
 
 const TOP_MARGIN = 195;
@@ -79,6 +86,15 @@ export class GameScene extends Phaser.Scene {
   private won = false;
   private animating = false;
   private settingsOpen = false;
+  private tooltipOpen = false;
+  // Loaded once in create() and updated in-memory the moment a tooltip is
+  // dismissed (not just written to storage) - otherwise restarting the same
+  // level within this scene instance would re-show an already-dismissed
+  // tooltip, since this field is only re-read from storage on a fresh
+  // GameScene (Menu -> back in, or advancing levels doesn't recreate it).
+  private seenTooltips: Partial<Record<TooltipId, boolean>> = {};
+  private pendingTooltipId: TooltipId | null = null;
+  private tooltipAccent = 0xffffff;
   private audio!: AudioService;
   private ads!: AdService;
   private freeUndoesRemaining = 3;
@@ -130,6 +146,14 @@ export class GameScene extends Phaser.Scene {
   private settingsPanelOutline!: Phaser.GameObjects.Graphics;
   private settingsTitle!: Phaser.GameObjects.Text;
   private settingsCloseButton!: Button;
+  private tooltipOverlay!: Phaser.GameObjects.Container;
+  private tooltipBackdrop!: Phaser.GameObjects.Rectangle;
+  private tooltipPanelBox!: Phaser.GameObjects.Graphics;
+  private tooltipPanelBevel!: Phaser.GameObjects.Graphics;
+  private tooltipPanelOutline!: Phaser.GameObjects.Graphics;
+  private tooltipTitle!: Phaser.GameObjects.Text;
+  private tooltipBody!: Phaser.GameObjects.Text;
+  private tooltipCloseButton!: Button;
 
   constructor() {
     super('Game');
@@ -139,12 +163,16 @@ export class GameScene extends Phaser.Scene {
     this.levelNumber = data.level ?? 1;
   }
 
-  create(): void {
+  async create(): Promise<void> {
     this.audio = new AudioService(this);
     this.ads = new AdService();
     void this.ads.initialize();
     this.createParticleTexture();
     this.createPourCubeTexture();
+    // Must resolve before loadLevel() at the end of create() runs its first
+    // maybeShowTooltip() check - otherwise the very first level could race
+    // the read and show (or wrongly skip) a tooltip the player already saw.
+    this.seenTooltips = await loadSeenTooltips();
 
     this.levelText = this.add
       .text(this.scale.width / 2, 60, '', {
@@ -200,6 +228,8 @@ export class GameScene extends Phaser.Scene {
     this.winOverlay.setVisible(false);
     this.settingsOverlay = this.buildSettingsOverlay();
     this.settingsOverlay.setVisible(false);
+    this.tooltipOverlay = this.buildTooltipOverlay();
+    this.tooltipOverlay.setVisible(false);
 
     this.layoutControls();
     // The Scale Manager's resize event is global, not scoped to whichever
@@ -402,6 +432,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private toggleSettings(): void {
+    if (this.tooltipOpen) return;
     if (this.settingsOpen) this.closeSettings();
     else this.openSettings();
   }
@@ -415,6 +446,156 @@ export class GameScene extends Phaser.Scene {
   private closeSettings(): void {
     this.settingsOpen = false;
     this.settingsOverlay.setVisible(false);
+  }
+
+  // A one-time explainer for each level twist (HARD/frozen/locked), shown
+  // the first time a player reaches one - otherwise the only way to learn
+  // what e.g. a padlocked flask means is to tap it, watch it shake, and
+  // guess. Same backdrop+panel shell as the settings popup, built once and
+  // reused for all three (text/accent set per call in showTooltip()) rather
+  // than three near-identical overlays.
+  private buildTooltipOverlay(): Phaser.GameObjects.Container {
+    this.tooltipBackdrop = this.add.rectangle(0, 0, 0, 0, 0x000000, 0.75).setOrigin(0);
+    this.tooltipBackdrop.setInteractive();
+    this.tooltipBackdrop.on('pointerdown', () => this.closeTooltip());
+
+    this.tooltipPanelBox = this.add.graphics();
+    this.tooltipPanelBevel = this.add.graphics();
+    this.tooltipPanelOutline = this.add.graphics();
+    this.tooltipTitle = this.add
+      .text(0, 0, '', {
+        fontFamily: theme.font.family,
+        fontSize: `${theme.font.size.body}px`,
+        color: '#ffffff',
+        align: 'center',
+        shadow: { offsetX: 2, offsetY: 2, color: '#000000', blur: 0, fill: true },
+      })
+      .setOrigin(0.5);
+    this.tooltipBody = this.add
+      .text(0, 0, '', {
+        fontFamily: theme.font.family,
+        fontSize: `${theme.font.size.small}px`,
+        color: '#ffffff',
+        align: 'center',
+        lineSpacing: 8,
+        wordWrap: { width: 220 },
+      })
+      .setOrigin(0.5);
+    this.tooltipCloseButton = createButton(
+      this,
+      0,
+      0,
+      140,
+      40,
+      'Got it',
+      () => this.closeTooltip(),
+      theme.accent.blue,
+      '#ffffff',
+    );
+
+    const container = this.add.container(0, 0, [
+      this.tooltipBackdrop,
+      this.tooltipPanelBox,
+      this.tooltipPanelBevel,
+      this.tooltipPanelOutline,
+      this.tooltipTitle,
+      this.tooltipBody,
+      this.tooltipCloseButton,
+    ]);
+    container.setDepth(950);
+    return container;
+  }
+
+  private layoutTooltipOverlay(): void {
+    const { width, height } = this.scale;
+    this.tooltipBackdrop.setSize(width, height);
+
+    const panelW = 280;
+    const panelH = 220;
+    const cx = width / 2;
+    const cy = height / 2;
+    drawPixelPanel(
+      {
+        shadow: this.tooltipPanelBox,
+        fill: this.tooltipPanelBox,
+        bevel: this.tooltipPanelBevel,
+        outline: this.tooltipPanelOutline,
+      },
+      panelW,
+      panelH,
+      { fillColor: theme.flask.glass, outlineColor: this.tooltipAccent },
+    );
+    this.tooltipPanelBox.setPosition(cx, cy);
+    this.tooltipPanelBevel.setPosition(cx, cy);
+    this.tooltipPanelOutline.setPosition(cx, cy);
+
+    this.tooltipTitle.setPosition(cx, cy - panelH / 2 + 28);
+    this.tooltipBody.setPosition(cx, cy - 6);
+    this.tooltipCloseButton.setPosition(cx, cy + panelH / 2 - 35);
+  }
+
+  // Picks the first level twist the player hasn't been told about yet, in
+  // the order they're first reachable (hard at level 3, frozen at 10,
+  // locked at 14) - at most one tooltip per level load, even if a level
+  // happens to combine twists the player hasn't seen either of (jumping
+  // into a high level via Level Select rather than climbing linearly).
+  // Whichever one didn't show this time shows on the next level that
+  // qualifies for it.
+  private maybeShowTooltip(): void {
+    if (this.level.isHard && !this.seenTooltips.hard) {
+      this.showTooltip(
+        'hard',
+        theme.accent.pink,
+        'HARD LEVEL',
+        'Tighter space, trickier mix - sometimes one less flask to work with.',
+      );
+    } else if (this.level.frozen && !this.seenTooltips.frozen) {
+      this.showTooltip(
+        'frozen',
+        0xbfe9ff,
+        'FROZEN FLASK',
+        "Can't pour from it yet. Make other moves - it thaws as the count hits zero.",
+      );
+    } else if (this.level.locked && !this.seenTooltips.locked) {
+      this.showTooltip(
+        'locked',
+        0x4a4a58,
+        'LOCKED FLASK',
+        "Can't pour from it yet. Finish sealing a different flask to unlock it.",
+      );
+    }
+  }
+
+  private showTooltip(id: TooltipId, accent: number, title: string, body: string): void {
+    this.tooltipOpen = true;
+    this.pendingTooltipId = id;
+    this.tooltipAccent = accent;
+    this.tooltipTitle.setText(title);
+    this.tooltipBody.setText(body);
+    this.layoutTooltipOverlay();
+    this.tooltipOverlay.setVisible(true);
+  }
+
+  private closeTooltip(): void {
+    this.tooltipOpen = false;
+    this.tooltipOverlay.setVisible(false);
+    if (this.pendingTooltipId) {
+      // Updated in-memory immediately, not just written to storage - see
+      // seenTooltips' field comment.
+      this.seenTooltips = { ...this.seenTooltips, [this.pendingTooltipId]: true };
+      void markTooltipSeen(this.pendingTooltipId);
+      this.pendingTooltipId = null;
+    }
+  }
+
+  // Resets the overlay on level load without marking anything seen - if a
+  // Restart interrupted a tooltip the player never actually dismissed, it
+  // should still show again next time it's relevant, not be silently marked
+  // "seen" just because the level reloaded out from under it.
+  private closeTooltipSilently(): void {
+    this.tooltipOpen = false;
+    this.pendingTooltipId = null;
+    this.tooltipOverlay.setVisible(false);
   }
 
   private loadLevel(levelNumber: number): void {
@@ -435,6 +616,7 @@ export class GameScene extends Phaser.Scene {
     this.updateExtraFlaskButtonLabel();
     this.winOverlay.setVisible(false);
     this.closeSettings();
+    this.closeTooltipSilently();
     this.levelText.setText(`Level ${levelNumber}`);
     void saveCurrentLevel(levelNumber);
     this.layoutBadges();
@@ -453,6 +635,12 @@ export class GameScene extends Phaser.Scene {
     this.relayout();
     this.updateFrostOverlay();
     this.updateLockOverlay();
+
+    // Delayed so the tooltip doesn't pop up before the player has even seen
+    // the board - let the flask layout settle first.
+    this.time.delayedCall(500, () => {
+      if (!this.won) this.maybeShowTooltip();
+    });
   }
 
   // A reusable chamfered pill (drawPixelPanel + a short label) for the badge
@@ -545,6 +733,7 @@ export class GameScene extends Phaser.Scene {
     this.levelText.setX(midX);
     if (this.level) this.layoutBadges();
     if (this.settingsOverlay) this.layoutSettingsOverlay();
+    if (this.tooltipOverlay) this.layoutTooltipOverlay();
   }
 
   // Groups sealed (full, single-color) flasks to the front of the board so
@@ -619,7 +808,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onFlaskTapped(index: number): void {
-    if (this.won || this.animating || this.settingsOpen) return;
+    if (this.won || this.animating || this.settingsOpen || this.tooltipOpen) return;
 
     if (this.selectedIndex === null) {
       if (
