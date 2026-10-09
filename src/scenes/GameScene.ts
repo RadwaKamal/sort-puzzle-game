@@ -637,9 +637,14 @@ export class GameScene extends Phaser.Scene {
     this.updateLockOverlay();
 
     // Delayed so the tooltip doesn't pop up before the player has even seen
-    // the board - let the flask layout settle first.
+    // the board - let the flask layout settle first. Also re-checks
+    // settingsOpen: toggleSettings() already blocks opening settings while
+    // tooltipOpen is true, but not the reverse - a tap on the gear icon
+    // inside this 500ms window (before tooltipOpen flips true) could still
+    // open settings, and this callback would otherwise show the tooltip
+    // on top of it regardless.
     this.time.delayedCall(500, () => {
-      if (!this.won) this.maybeShowTooltip();
+      if (!this.won && !this.settingsOpen) this.maybeShowTooltip();
     });
   }
 
