@@ -3,7 +3,7 @@ import { theme } from '../theme';
 import { createButton } from '../view/button';
 import { drawPixelPanel } from '../view/pixelPanel';
 import { drawStarRow } from '../view/star';
-import { isHardLevel } from '../core/generator';
+import { isFrozenLevel, isHardLevel } from '../core/generator';
 import { loadProgress, loadAllLevelStars } from '../services/storage';
 import type { Progress, LevelStars } from '../services/storage';
 
@@ -106,7 +106,16 @@ export class LevelSelectScene extends Phaser.Scene {
       const unlocked = levelNumber <= this.progress.unlockedLevel;
 
       this.gridContainer.add(
-        this.createLevelCell(x, y, cellSize, levelNumber, unlocked, isHardLevel(levelNumber), this.stars[levelNumber] ?? 0),
+        this.createLevelCell(
+          x,
+          y,
+          cellSize,
+          levelNumber,
+          unlocked,
+          isHardLevel(levelNumber),
+          isFrozenLevel(levelNumber),
+          this.stars[levelNumber] ?? 0,
+        ),
       );
     }
 
@@ -118,7 +127,10 @@ export class LevelSelectScene extends Phaser.Scene {
   // (via drawPixelPanel) to match the arcade look, just a quieter one. Hard
   // levels (every 3rd) get a pink fill instead of yellow plus a small corner
   // diamond, so they're distinguishable even for colorblind players, not
-  // just by hue.
+  // just by hue. Frozen levels (every 5th from 10 on) get a second, icy-blue
+  // diamond in the opposite corner - a separate shape+corner rather than a
+  // fill-color change, since fill is already spoken for by hard/normal and
+  // the two twists occasionally land on the same level.
   private createLevelCell(
     x: number,
     y: number,
@@ -126,6 +138,7 @@ export class LevelSelectScene extends Phaser.Scene {
     levelNumber: number,
     unlocked: boolean,
     hard: boolean,
+    frozen: boolean,
     starsEarned: number,
   ): Phaser.GameObjects.Container {
     // Blue rather than yellow for normal cells - yellow is also the star
@@ -150,6 +163,32 @@ export class LevelSelectScene extends Phaser.Scene {
       const by = -size / 2 + 8;
       const r = 6;
       outline.fillStyle(0xffffff, 1);
+      outline.fillPoints(
+        [
+          { x: bx, y: by - r },
+          { x: bx + r, y: by },
+          { x: bx, y: by + r },
+          { x: bx - r, y: by },
+        ],
+        true,
+      );
+      outline.lineStyle(1.5, 0x0d0d14, 1);
+      outline.strokePoints(
+        [
+          { x: bx, y: by - r },
+          { x: bx + r, y: by },
+          { x: bx, y: by + r },
+          { x: bx - r, y: by },
+        ],
+        true,
+      );
+    }
+
+    if (frozen) {
+      const bx = -size / 2 + 8;
+      const by = -size / 2 + 8;
+      const r = 6;
+      outline.fillStyle(0xbfe9ff, 1);
       outline.fillPoints(
         [
           { x: bx, y: by - r },

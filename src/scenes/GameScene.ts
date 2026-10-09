@@ -93,6 +93,11 @@ export class GameScene extends Phaser.Scene {
   private hardBadgeBevel!: Phaser.GameObjects.Graphics;
   private hardBadgeOutline!: Phaser.GameObjects.Graphics;
   private hardBadgeLabel!: Phaser.GameObjects.Text;
+  private frozenBadge!: Phaser.GameObjects.Container;
+  private frozenBadgeBox!: Phaser.GameObjects.Graphics;
+  private frozenBadgeBevel!: Phaser.GameObjects.Graphics;
+  private frozenBadgeOutline!: Phaser.GameObjects.Graphics;
+  private frozenBadgeLabel!: Phaser.GameObjects.Text;
   private menuButton!: Phaser.GameObjects.Container;
   private restartButton!: Phaser.GameObjects.Container;
   private undoButton!: BadgedIconButton;
@@ -159,6 +164,29 @@ export class GameScene extends Phaser.Scene {
       this.hardBadgeLabel,
     ]);
     this.hardBadge.setVisible(false);
+
+    // Same pill, icy accent, for frozen levels - telegraphs the twist before
+    // the player ever taps the flask and finds it won't move. Chains after
+    // HARD's pill (not always at a fixed slot) since the two occasionally
+    // land on the same level (see isFrozenLevel's comment on the offset
+    // cadence) and both need to fit without overlapping.
+    this.frozenBadgeBox = this.add.graphics();
+    this.frozenBadgeBevel = this.add.graphics();
+    this.frozenBadgeOutline = this.add.graphics();
+    this.frozenBadgeLabel = this.add
+      .text(0, 1, 'ICE', {
+        fontFamily: theme.font.family,
+        fontSize: '9px',
+        color: '#0d3b52',
+      })
+      .setOrigin(0.5);
+    this.frozenBadge = this.add.container(0, 0, [
+      this.frozenBadgeBox,
+      this.frozenBadgeBevel,
+      this.frozenBadgeOutline,
+      this.frozenBadgeLabel,
+    ]);
+    this.frozenBadge.setVisible(false);
 
     this.menuButton = createIconButton(this, 0, 0, 44, () => this.scene.start('Menu'), drawBackIcon, theme.accent.blue);
     this.restartButton = createIconButton(this, 0, 0, 52, () => this.restart(), drawRestartIcon, theme.accent.blue);
@@ -421,7 +449,7 @@ export class GameScene extends Phaser.Scene {
     this.closeSettings();
     this.levelText.setText(`Level ${levelNumber}`);
     void saveCurrentLevel(levelNumber);
-    this.layoutHardBadge();
+    this.layoutBadges();
 
     for (const view of this.flaskViews) {
       this.tweens.killTweensOf(view);
@@ -437,27 +465,50 @@ export class GameScene extends Phaser.Scene {
     this.updateFrostOverlay();
   }
 
-  // Positions the "HARD" pill just to the right of the level title - must
-  // run after levelText.setText() so its measured width is current.
-  private layoutHardBadge(): void {
-    if (!this.level.isHard) {
-      this.hardBadge.setVisible(false);
-      return;
-    }
+  // Positions the "HARD"/"ICE" pills as a row centered under the level
+  // title - NOT beside the title (a two-digit-plus level number like "Level
+  // 21" already sits close to the settings gear at the top-right corner;
+  // tacking a badge on its right edge pushed it under or past the gear, and
+  // a second badge for a both-hard-and-frozen level ran off the right edge
+  // of the screen entirely). Centering the badge row as its own line below
+  // the title keeps it clear of the gear and scales to any badge count.
+  private layoutBadges(): void {
+    const { width } = this.scale;
+    const midX = width / 2;
     const badgeW = 56;
     const badgeH = 20;
-    const x = this.levelText.x + this.levelText.width / 2 + 10 + badgeW / 2;
-    const y = this.levelText.y;
+    const gap = 8;
+    const y = 95;
 
-    drawPixelPanel(
-      { shadow: this.hardBadgeBox, fill: this.hardBadgeBox, bevel: this.hardBadgeBevel, outline: this.hardBadgeOutline },
-      badgeW,
-      badgeH,
-      { fillColor: theme.accent.pink, outlineColor: theme.ui.outline },
-    );
+    if (this.level.isHard) {
+      drawPixelPanel(
+        { shadow: this.hardBadgeBox, fill: this.hardBadgeBox, bevel: this.hardBadgeBevel, outline: this.hardBadgeOutline },
+        badgeW,
+        badgeH,
+        { fillColor: theme.accent.pink, outlineColor: theme.ui.outline },
+      );
+    }
+    if (this.level.frozen) {
+      drawPixelPanel(
+        { shadow: this.frozenBadgeBox, fill: this.frozenBadgeBox, bevel: this.frozenBadgeBevel, outline: this.frozenBadgeOutline },
+        badgeW,
+        badgeH,
+        { fillColor: 0xbfe9ff, outlineColor: theme.ui.outline },
+      );
+    }
 
-    this.hardBadge.setPosition(x, y);
-    this.hardBadge.setVisible(true);
+    const activeBadges = [
+      ...(this.level.isHard ? [this.hardBadge] : []),
+      ...(this.level.frozen ? [this.frozenBadge] : []),
+    ];
+    const totalW = activeBadges.length * badgeW + Math.max(0, activeBadges.length - 1) * gap;
+    let x = midX - totalW / 2 + badgeW / 2;
+    for (const badge of activeBadges) {
+      badge.setPosition(x, y);
+      x += badgeW + gap;
+    }
+    this.hardBadge.setVisible(this.level.isHard);
+    this.frozenBadge.setVisible(!!this.level.frozen);
   }
 
   // Positions every fixed-chrome control (title, badge, top button row) from
@@ -493,7 +544,7 @@ export class GameScene extends Phaser.Scene {
     this.hintButton.container.setPosition(hx, HELPER_Y);
 
     this.levelText.setX(midX);
-    if (this.level) this.layoutHardBadge();
+    if (this.level) this.layoutBadges();
     if (this.settingsOverlay) this.layoutSettingsOverlay();
   }
 
