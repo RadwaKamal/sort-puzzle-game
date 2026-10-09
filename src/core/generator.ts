@@ -7,7 +7,7 @@ import { createEmptyFlask, LAYERS_PER_FLASK } from './board';
 import type { Board, Color } from './board';
 import { SeededRng } from './rng';
 import { solve } from './solver';
-import type { FrozenSpec } from './solver';
+import type { FrozenSpec, LockSpec } from './solver';
 
 export interface Level {
   levelNumber: number;
@@ -23,6 +23,8 @@ export interface Level {
   isHard: boolean;
   // null on every level except the occasional frozen one (see isFrozenLevel).
   frozen: FrozenSpec | null;
+  // null on every level except the occasional locked one (see isLockedLevel).
+  locked: LockSpec | null;
 }
 
 const MIN_COLORS = 3;
@@ -60,6 +62,16 @@ const FROZEN_LEVEL_INTERVAL = 5;
 // board - including the freeze - has actually been solved.
 const FROZEN_THAW_FRACTION = 0.4;
 const FROZEN_THAW_MIN_MOVES = 2;
+// A third spotlighted twist - a flask locked until a *different* flask is
+// sealed, a dependency/ordering puzzle rather than frozen's wait-it-out
+// timer. Its own offset/interval (coprime-ish with 3 and 5) so all three
+// twists mostly land on different levels; see generator.test.ts for the
+// actual measured overlap frequency across levels 1-200. START must itself
+// be a multiple of INTERVAL (same as FROZEN_LEVEL_START is of its interval)
+// for the cadence to actually start there - `isLockedLevel` checks
+// `levelNumber % INTERVAL === 0`, not an offset from START.
+const LOCK_LEVEL_START = 14;
+const LOCK_LEVEL_INTERVAL = 7;
 
 const MAX_GENERATION_ATTEMPTS = 500;
 
@@ -74,6 +86,10 @@ export function isHardLevel(levelNumber: number): boolean {
 
 export function isFrozenLevel(levelNumber: number): boolean {
   return levelNumber >= FROZEN_LEVEL_START && levelNumber % FROZEN_LEVEL_INTERVAL === 0;
+}
+
+export function isLockedLevel(levelNumber: number): boolean {
+  return levelNumber >= LOCK_LEVEL_START && levelNumber % LOCK_LEVEL_INTERVAL === 0;
 }
 
 // A deterministic per-attempt seed so retries are reproducible: the same
@@ -118,24 +134,43 @@ export function generateLevel(levelNumber: number): Level {
   // or beat it.
   const minMoves = Math.ceil(numColors * (isHard ? 1.3 : 1.15));
   const frozenThisLevel = isFrozenLevel(levelNumber);
+  // Locking removes legal moves the same way hard's flask-count reduction
+  // does - stacking both constraints compounds multiplicatively, not
+  // additively. Measured directly: level 63 (7 colors, hard+fewer-flasks,
+  // locked) was 0/500 solvable attempts even though hard-alone and
+  // locked-alone are each fine on their own. So locked is skipped whenever
+  // hard is *also* using its risky reduced-flask mode on this level - same
+  // mitigation hard's own comment already documents for 8+ colors.
+  const lockedThisLevel = isLockedLevel(levelNumber) && !hardFewerFlasks;
 
   for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {
     const rng = new SeededRng(seedForAttempt(levelNumber, attempt));
     const board = buildCandidateBoard(rng, numColors, numFlasks);
-    // Only ever freezes one of the starting color flasks (indices
+    // Only ever freezes/locks one of the starting color flasks (indices
     // 0..numColors-1 per buildCandidateBoard) - the free empty flasks are
-    // the player's maneuvering room, freezing one of those would just be a
-    // no-op since there'd be nothing in it to pour out anyway.
+    // the player's maneuvering room, freezing/locking one of those would
+    // just be a no-op since there'd be nothing in it to pour out anyway.
     const frozen: FrozenSpec | null = frozenThisLevel
       ? {
           flaskIndex: rng.nextInt(0, numColors - 1),
           thawAtMove: Math.max(FROZEN_THAW_MIN_MOVES, Math.round(minMoves * FROZEN_THAW_FRACTION)),
         }
       : null;
-    const result = solve(board, LAYERS_PER_FLASK, undefined, frozen);
+    // keyFlaskIndex and flaskIndex must be distinct - numColors >= MIN_COLORS
+    // (3) always leaves at least one other color flask to pick from, so this
+    // rejection loop always terminates (expected ~1.x iterations).
+    const locked: LockSpec | null = lockedThisLevel
+      ? (() => {
+          const keyFlaskIndex = rng.nextInt(0, numColors - 1);
+          let flaskIndex = rng.nextInt(0, numColors - 1);
+          while (flaskIndex === keyFlaskIndex) flaskIndex = rng.nextInt(0, numColors - 1);
+          return { flaskIndex, keyFlaskIndex };
+        })()
+      : null;
+    const result = solve(board, LAYERS_PER_FLASK, undefined, frozen, locked);
 
     if (result.solvable && !result.inconclusive && (result.moveCount ?? 0) >= minMoves) {
-      return { levelNumber, numColors, board, parMoves: result.moveCount as number, isHard, frozen };
+      return { levelNumber, numColors, board, parMoves: result.moveCount as number, isHard, frozen, locked };
     }
   }
 

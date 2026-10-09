@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { colorsForLevel, generateLevel, isFrozenLevel, isHardLevel } from '../src/core/generator';
+import { colorsForLevel, generateLevel, isFrozenLevel, isHardLevel, isLockedLevel } from '../src/core/generator';
 import { solve } from '../src/core/solver';
 
 describe('colorsForLevel', () => {
@@ -27,6 +27,15 @@ describe('isFrozenLevel', () => {
     expect(isFrozenLevel(15)).toBe(true);
     expect(isFrozenLevel(5)).toBe(false);
     expect(isFrozenLevel(9)).toBe(false);
+  });
+});
+
+describe('isLockedLevel', () => {
+  it('flags every 7th level from level 14 on, and only those', () => {
+    expect(isLockedLevel(14)).toBe(true);
+    expect(isLockedLevel(21)).toBe(true);
+    expect(isLockedLevel(7)).toBe(false);
+    expect(isLockedLevel(13)).toBe(false);
   });
 });
 
@@ -58,7 +67,7 @@ describe('generateLevel', () => {
     () => {
       for (let levelNumber = 1; levelNumber <= 200; levelNumber++) {
         const level = generateLevel(levelNumber);
-        const result = solve(level.board, undefined, undefined, level.frozen);
+        const result = solve(level.board, undefined, undefined, level.frozen, level.locked);
         expect(result.solvable, `level ${levelNumber} should be solvable`).toBe(true);
         expect(result.inconclusive, `level ${levelNumber} solve() should be conclusive`).toBeFalsy();
       }
@@ -72,7 +81,7 @@ describe('generateLevel', () => {
 
   it('parMoves matches the solver\'s actual move count for that exact board, not just a threshold', () => {
     const level = generateLevel(50);
-    const result = solve(level.board, undefined, undefined, level.frozen);
+    const result = solve(level.board, undefined, undefined, level.frozen, level.locked);
     expect(level.parMoves).toBe(result.moveCount);
     expect(level.parMoves).toBeGreaterThan(0);
   });
@@ -89,5 +98,21 @@ describe('generateLevel', () => {
   it('non-frozen levels have a null frozen field', () => {
     const level = generateLevel(11); // not a multiple of 5
     expect(level.frozen).toBeNull();
+  });
+
+  it('locked levels lock one color flask behind a different, distinct key flask', () => {
+    const level = generateLevel(14); // 14 >= 14 && 14 % 7 === 0, and not hard (14 % 3 !== 0)
+    expect(level.locked).not.toBeNull();
+    const locked = level.locked!;
+    expect(locked.flaskIndex).toBeGreaterThanOrEqual(0);
+    expect(locked.flaskIndex).toBeLessThan(level.numColors);
+    expect(locked.keyFlaskIndex).toBeGreaterThanOrEqual(0);
+    expect(locked.keyFlaskIndex).toBeLessThan(level.numColors);
+    expect(locked.flaskIndex).not.toBe(locked.keyFlaskIndex);
+  });
+
+  it('non-locked levels have a null locked field', () => {
+    const level = generateLevel(19); // not a multiple of 7
+    expect(level.locked).toBeNull();
   });
 });

@@ -11,7 +11,7 @@
 // still proves unsolvability by exhausting the reachable state space — it
 // just finds *a* solution rather than guaranteeing the shortest one.
 
-import { applyMove, getLegalMoves, hashBoard, isBoardSolved, LAYERS_PER_FLASK } from './board';
+import { applyMove, getLegalMoves, hashBoard, isBoardSolved, isFlaskSealed, LAYERS_PER_FLASK } from './board';
 import type { Board } from './board';
 
 // A single flask that can't be poured *from* until `thawAtMove` real moves
@@ -21,6 +21,17 @@ import type { Board } from './board';
 export interface FrozenSpec {
   flaskIndex: number;
   thawAtMove: number;
+}
+
+// A single flask that can't be poured *from* until a *different* flask
+// (`keyFlaskIndex`) is sealed (full, single-color) - a dependency/ordering
+// puzzle rather than frozen's wait-it-out timer. Unlike frozen, this needs
+// no move-count bookkeeping at all: "is flaskIndex locked" is a pure
+// function of the current board (is keyFlaskIndex sealed yet?), so it
+// naturally re-locks on undo for free, same as frozen's live recompute.
+export interface LockSpec {
+  flaskIndex: number;
+  keyFlaskIndex: number;
 }
 
 export interface SolveResult {
@@ -123,11 +134,14 @@ class MinHeap {
 // mid-game Hint search - which starts from the player's current board, not
 // the level's original one - still checks the frozen flask's thaw threshold
 // against real moves-since-level-start, not moves-since-this-search-began.
+// `locked` needs no such offset - it's checked against each node's own
+// board, not a move count.
 function search(
   board: Board,
   capacity: number,
   maxStates: number,
   frozen: FrozenSpec | null,
+  locked: LockSpec | null,
   startMoves: number,
 ): SearchResult {
   if (isBoardSolved(board, capacity)) {
@@ -136,6 +150,10 @@ function search(
 
   const isFrozenFlask = (totalMoves: number, index: number): boolean =>
     frozen !== null && index === frozen.flaskIndex && totalMoves < frozen.thawAtMove;
+  const isLockedFlask = (currentBoard: Board, index: number): boolean =>
+    locked !== null &&
+    index === locked.flaskIndex &&
+    !isFlaskSealed(currentBoard[locked.keyFlaskIndex], capacity);
 
   const visited = new Set<string>([hashBoard(board)]);
   const open = new MinHeap();
@@ -147,13 +165,16 @@ function search(
     }
 
     const node = open.pop();
-    // Only builds the per-node adapter closure when a frozen flask is
-    // actually in play - most searches (non-frozen levels) skip it entirely,
-    // and this loop can pop tens of thousands of nodes.
+    // Only builds a per-node adapter closure for whichever constraints are
+    // actually active - most searches have neither, and this loop can pop
+    // tens of thousands of nodes.
     const totalMoves = startMoves + node.moves;
-    const frozenCheck = frozen ? (index: number) => isFrozenFlask(totalMoves, index) : undefined;
+    const blocked =
+      frozen || locked
+        ? (index: number) => isFrozenFlask(totalMoves, index) || isLockedFlask(node.board, index)
+        : undefined;
 
-    for (const move of getLegalMoves(node.board, capacity, frozenCheck)) {
+    for (const move of getLegalMoves(node.board, capacity, blocked)) {
       const [from, to] = move;
       const next = applyMove(node.board, from, to, capacity);
       const key = hashBoard(next);
@@ -177,9 +198,10 @@ export function solve(
   capacity = LAYERS_PER_FLASK,
   maxStates = DEFAULT_MAX_STATES,
   frozen: FrozenSpec | null = null,
+  locked: LockSpec | null = null,
   startMoves = 0,
 ): SolveResult {
-  const result = search(board, capacity, maxStates, frozen, startMoves);
+  const result = search(board, capacity, maxStates, frozen, locked, startMoves);
   return { solvable: result.solvable, moveCount: result.moveCount, inconclusive: result.inconclusive };
 }
 
@@ -194,9 +216,10 @@ export function findHintMove(
   capacity = LAYERS_PER_FLASK,
   maxStates = DEFAULT_MAX_STATES,
   frozen: FrozenSpec | null = null,
+  locked: LockSpec | null = null,
   startMoves = 0,
 ): Move | null {
-  const result = search(board, capacity, maxStates, frozen, startMoves);
+  const result = search(board, capacity, maxStates, frozen, locked, startMoves);
   if (!result.solvable) return null;
   return result.firstMove;
 }

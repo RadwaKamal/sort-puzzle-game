@@ -46,12 +46,24 @@ const MAX_HINTS_PER_LEVEL = 3;
 const PARTICLE_TEXTURE = 'particle';
 const POUR_CUBE_TEXTURE = 'pourCube';
 const POUR_CUBE_SIZE = 18;
+// Size of the HARD/ICE/LOCK title pills - shared between createTitleBadge's
+// actual drawPixelPanel call and layoutBadges' row-width math so the two
+// can't drift out of sync.
+const TITLE_BADGE_W = 56;
+const TITLE_BADGE_H = 20;
 
 interface FlaskSlot {
   x: number;
   y: number;
   w: number;
   h: number;
+}
+
+// A small chamfered pixel-panel pill with a short text label - see
+// createTitleBadge().
+interface TitleBadge {
+  container: Phaser.GameObjects.Container;
+  draw(fillColor: number): void;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -84,19 +96,16 @@ export class GameScene extends Phaser.Scene {
   // can detect the exact moment it hits 0 and fire a one-off thaw sparkle,
   // instead of re-celebrating on every subsequent move once already thawed.
   private lastFrozenRemaining: number | null = null;
+  // Same purpose as lastFrozenRemaining but for the locked flask's boolean
+  // state (sealed-dependency unlock, not a countdown) - detects the exact
+  // transition to fire a one-off unlock sparkle.
+  private lastLockedState: boolean | null = null;
 
   private flaskViews: FlaskView[] = [];
   private levelText!: Phaser.GameObjects.Text;
-  private hardBadge!: Phaser.GameObjects.Container;
-  private hardBadgeBox!: Phaser.GameObjects.Graphics;
-  private hardBadgeBevel!: Phaser.GameObjects.Graphics;
-  private hardBadgeOutline!: Phaser.GameObjects.Graphics;
-  private hardBadgeLabel!: Phaser.GameObjects.Text;
-  private frozenBadge!: Phaser.GameObjects.Container;
-  private frozenBadgeBox!: Phaser.GameObjects.Graphics;
-  private frozenBadgeBevel!: Phaser.GameObjects.Graphics;
-  private frozenBadgeOutline!: Phaser.GameObjects.Graphics;
-  private frozenBadgeLabel!: Phaser.GameObjects.Text;
+  private hardBadge!: TitleBadge;
+  private frozenBadge!: TitleBadge;
+  private lockBadge!: TitleBadge;
   private menuButton!: Phaser.GameObjects.Container;
   private undoButton!: BadgedIconButton;
   private extraFlaskButton!: BadgedIconButton;
@@ -146,49 +155,14 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    // Small "HARD" pill shown next to the title on every 3rd level - built
-    // once here, repositioned/shown per level in loadLevel() once the title
-    // text (and therefore its width) is known.
-    this.hardBadgeBox = this.add.graphics();
-    this.hardBadgeBevel = this.add.graphics();
-    this.hardBadgeOutline = this.add.graphics();
-    this.hardBadgeLabel = this.add
-      .text(0, 1, 'HARD', {
-        fontFamily: theme.font.family,
-        fontSize: '9px',
-        color: '#0d0d14',
-      })
-      .setOrigin(0.5);
-    this.hardBadge = this.add.container(0, 0, [
-      this.hardBadgeBox,
-      this.hardBadgeBevel,
-      this.hardBadgeOutline,
-      this.hardBadgeLabel,
-    ]);
-    this.hardBadge.setVisible(false);
-
-    // Same pill, icy accent, for frozen levels - telegraphs the twist before
-    // the player ever taps the flask and finds it won't move. Chains after
-    // HARD's pill (not always at a fixed slot) since the two occasionally
-    // land on the same level (see isFrozenLevel's comment on the offset
-    // cadence) and both need to fit without overlapping.
-    this.frozenBadgeBox = this.add.graphics();
-    this.frozenBadgeBevel = this.add.graphics();
-    this.frozenBadgeOutline = this.add.graphics();
-    this.frozenBadgeLabel = this.add
-      .text(0, 1, 'ICE', {
-        fontFamily: theme.font.family,
-        fontSize: '9px',
-        color: '#0d3b52',
-      })
-      .setOrigin(0.5);
-    this.frozenBadge = this.add.container(0, 0, [
-      this.frozenBadgeBox,
-      this.frozenBadgeBevel,
-      this.frozenBadgeOutline,
-      this.frozenBadgeLabel,
-    ]);
-    this.frozenBadge.setVisible(false);
+    // Small pills shown in a row below the title, one per active level twist
+    // (HARD every 3rd level, ICE on frozen levels, LOCK on locked levels -
+    // see layoutBadges()). A third type showing up is exactly why this is a
+    // small reusable factory now instead of three separate hand-copied
+    // Graphics/Text/Container blocks - see createTitleBadge's comment.
+    this.hardBadge = this.createTitleBadge('HARD', '#0d0d14');
+    this.frozenBadge = this.createTitleBadge('ICE', '#0d3b52');
+    this.lockBadge = this.createTitleBadge('LOCK', '#ffffff');
 
     this.menuButton = createIconButton(this, 0, 0, 44, () => this.scene.start('Menu'), drawBackIcon, theme.accent.blue);
     this.undoButton = createBadgedIconButton(this, 0, 0, 56, () => void this.undo(), drawUndoIcon, theme.accent.green);
@@ -475,53 +449,66 @@ export class GameScene extends Phaser.Scene {
     for (const view of this.flaskViews) this.add.existing(view);
 
     this.lastFrozenRemaining = null;
+    this.lastLockedState = null;
     this.relayout();
     this.updateFrostOverlay();
+    this.updateLockOverlay();
   }
 
-  // Positions the "HARD"/"ICE" pills as a row centered under the level
+  // A reusable chamfered pill (drawPixelPanel + a short label) for the badge
+  // row below the level title - factored out once a third badge type (LOCK)
+  // made three hand-copied Graphics/Text/Container blocks a real
+  // duplication problem rather than a hypothetical one. `box`/`bevel`/
+  // `outline` only need to live as long as the closure below, not as
+  // instance fields - draw() is the only thing a caller needs afterwards.
+  private createTitleBadge(text: string, textColor: string): TitleBadge {
+    const box = this.add.graphics();
+    const bevel = this.add.graphics();
+    const outline = this.add.graphics();
+    const label = this.add
+      .text(0, 1, text, { fontFamily: theme.font.family, fontSize: '9px', color: textColor })
+      .setOrigin(0.5);
+    const container = this.add.container(0, 0, [box, bevel, outline, label]);
+    container.setVisible(false);
+    return {
+      container,
+      draw: (fillColor: number) => {
+        drawPixelPanel({ shadow: box, fill: box, bevel, outline }, TITLE_BADGE_W, TITLE_BADGE_H, {
+          fillColor,
+          outlineColor: theme.ui.outline,
+        });
+      },
+    };
+  }
+
+  // Positions the HARD/ICE/LOCK pills as a row centered under the level
   // title - NOT beside the title (a two-digit-plus level number like "Level
   // 21" already sits close to the settings gear at the top-right corner;
   // tacking a badge on its right edge pushed it under or past the gear, and
   // a second badge for a both-hard-and-frozen level ran off the right edge
   // of the screen entirely). Centering the badge row as its own line below
-  // the title keeps it clear of the gear and scales to any badge count.
+  // the title keeps it clear of the gear and scales to any badge count -
+  // adding a 4th badge type later is just another entry in `specs` below.
   private layoutBadges(): void {
     const { width } = this.scale;
     const midX = width / 2;
-    const badgeW = 56;
-    const badgeH = 20;
     const gap = 8;
     const y = 95;
 
-    if (this.level.isHard) {
-      drawPixelPanel(
-        { shadow: this.hardBadgeBox, fill: this.hardBadgeBox, bevel: this.hardBadgeBevel, outline: this.hardBadgeOutline },
-        badgeW,
-        badgeH,
-        { fillColor: theme.accent.pink, outlineColor: theme.ui.outline },
-      );
+    const specs: [TitleBadge, boolean, number][] = [
+      [this.hardBadge, this.level.isHard, theme.accent.pink],
+      [this.frozenBadge, !!this.level.frozen, 0xbfe9ff],
+      [this.lockBadge, !!this.level.locked, 0x4a4a58],
+    ];
+    const active = specs.filter(([, show]) => show);
+    const totalW = active.length * TITLE_BADGE_W + Math.max(0, active.length - 1) * gap;
+    let x = midX - totalW / 2 + TITLE_BADGE_W / 2;
+    for (const [badge, , fillColor] of active) {
+      badge.draw(fillColor);
+      badge.container.setPosition(x, y);
+      x += TITLE_BADGE_W + gap;
     }
-    if (this.level.frozen) {
-      drawPixelPanel(
-        { shadow: this.frozenBadgeBox, fill: this.frozenBadgeBox, bevel: this.frozenBadgeBevel, outline: this.frozenBadgeOutline },
-        badgeW,
-        badgeH,
-        { fillColor: 0xbfe9ff, outlineColor: theme.ui.outline },
-      );
-    }
-
-    const activeBadges: Phaser.GameObjects.Container[] = [];
-    if (this.level.isHard) activeBadges.push(this.hardBadge);
-    if (this.level.frozen) activeBadges.push(this.frozenBadge);
-    const totalW = activeBadges.length * badgeW + Math.max(0, activeBadges.length - 1) * gap;
-    let x = midX - totalW / 2 + badgeW / 2;
-    for (const badge of activeBadges) {
-      badge.setPosition(x, y);
-      x += badgeW + gap;
-    }
-    this.hardBadge.setVisible(this.level.isHard);
-    this.frozenBadge.setVisible(!!this.level.frozen);
+    for (const [badge, show] of specs) badge.container.setVisible(show);
   }
 
   // Positions every fixed-chrome control (title, badge, top button row) from
@@ -635,10 +622,15 @@ export class GameScene extends Phaser.Scene {
     if (this.won || this.animating || this.settingsOpen) return;
 
     if (this.selectedIndex === null) {
-      if (isFlaskSealed(this.board[index], LAYERS_PER_FLASK) || this.isFlaskFrozenNow(index)) {
+      if (
+        isFlaskSealed(this.board[index], LAYERS_PER_FLASK) ||
+        this.isFlaskFrozenNow(index) ||
+        this.isFlaskLockedNow(index)
+      ) {
         // Sealed flasks hold every unit of their color - there's never a
         // legal pour out of one. A still-frozen flask just isn't thawed
-        // yet. Both read the same to the player: shake it, say no.
+        // yet. A still-locked flask is waiting on its key flask to seal.
+        // All three read the same to the player: shake it, say no.
         this.audio.play('error');
         this.audio.haptic('error');
         this.flaskViews[index].shake();
@@ -774,6 +766,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.updateFrostOverlay();
+    this.updateLockOverlay();
     this.checkWin();
   }
 
@@ -798,6 +791,30 @@ export class GameScene extends Phaser.Scene {
   private isFlaskFrozenNow(index: number): boolean {
     const frozen = this.level.frozen;
     return frozen !== null && frozen.flaskIndex === index && this.history.length < frozen.thawAtMove;
+  }
+
+  // Keeps the locked flask's padlock in sync with whether its key flask is
+  // currently sealed - called at the same points as updateFrostOverlay()
+  // (any pour can seal the key flask, not just a pour targeting it
+  // directly). Pure function of the live board, so undo naturally re-locks
+  // it for free if the key flask's seal gets undone.
+  private updateLockOverlay(): void {
+    const locked = this.level.locked;
+    if (!locked) return;
+
+    const isLocked = this.isFlaskLockedNow(locked.flaskIndex);
+    const view = this.flaskViews[locked.flaskIndex];
+    view.setLocked(isLocked);
+
+    if (this.lastLockedState === true && !isLocked) {
+      this.spawnSparkle(view.layoutX, view.layoutY, 0xffffff);
+    }
+    this.lastLockedState = isLocked;
+  }
+
+  private isFlaskLockedNow(index: number): boolean {
+    const locked = this.level.locked;
+    return locked !== null && locked.flaskIndex === index && !isFlaskSealed(this.board[locked.keyFlaskIndex], LAYERS_PER_FLASK);
   }
 
   private spawnSparkle(x: number, y: number, tint: number): void {
@@ -875,6 +892,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.board = this.history.pop() as Board;
     this.updateFrostOverlay();
+    this.updateLockOverlay();
     this.relayout(true);
   }
 
@@ -972,8 +990,15 @@ export class GameScene extends Phaser.Scene {
 
     // startMoves (this.history.length) keeps the frozen flask's thaw
     // threshold correct even when hinting isn't from the level's original
-    // board - see findHintMove's comment.
-    const move = findHintMove(this.board, LAYERS_PER_FLASK, undefined, this.level.frozen, this.history.length);
+    // board - see findHintMove's comment. Locked needs no such offset.
+    const move = findHintMove(
+      this.board,
+      LAYERS_PER_FLASK,
+      undefined,
+      this.level.frozen,
+      this.level.locked,
+      this.history.length,
+    );
     if (!move) return;
     const [from, to] = move;
     this.flaskViews[from].hintPulse();

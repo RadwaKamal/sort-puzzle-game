@@ -43,11 +43,13 @@ export class FlaskView extends Phaser.GameObjects.Container {
   private readonly outline: Phaser.GameObjects.Graphics;
   private readonly frost: Phaser.GameObjects.Graphics;
   private readonly frostText: Phaser.GameObjects.Text;
+  private readonly lock: Phaser.GameObjects.Graphics;
   private width_ = 0;
   private height_ = 0;
   private selected = false;
   private moveTween?: Phaser.Tweens.Tween;
   private frozenMovesRemaining = 0;
+  private isLockedNow = false;
   layoutX = 0;
   layoutY = 0;
 
@@ -71,6 +73,7 @@ export class FlaskView extends Phaser.GameObjects.Container {
       })
       .setOrigin(0.5)
       .setVisible(false);
+    this.lock = scene.add.graphics();
     this.add([
       this.shadow,
       this.background,
@@ -79,6 +82,7 @@ export class FlaskView extends Phaser.GameObjects.Container {
       this.outline,
       this.frost,
       this.frostText,
+      this.lock,
       this.cap,
     ]);
 
@@ -121,6 +125,7 @@ export class FlaskView extends Phaser.GameObjects.Container {
     this.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
     this.drawShell();
     this.drawFrost();
+    this.drawLock();
   }
 
   // Slides to a new home position (used to regroup sealed flasks to the
@@ -432,5 +437,60 @@ export class FlaskView extends Phaser.GameObjects.Container {
     }
 
     this.frostText.setVisible(true).setText(String(this.frozenMovesRemaining)).setPosition(0, 0);
+  }
+
+  // Locked flasks (the occasional locked-level twist) can't be poured *from*
+  // until a *different* flask seals - unlike frozen's translucent ice (which
+  // deliberately keeps the colors visible since the countdown is the whole
+  // point), this is a dark, fully-obscuring tint with a padlock glyph: the
+  // flask isn't "almost ready", it's just not relevant yet, so hiding its
+  // contents reads as "ignore this one for now" rather than "watch it rise".
+  setLocked(isLocked: boolean): void {
+    this.isLockedNow = isLocked;
+    this.drawLock();
+  }
+
+  private drawLock(): void {
+    this.lock.clear();
+    if (!this.isLockedNow) return;
+
+    const cellW = this.width_ / GRID_COLS;
+    const cellH = this.height_ / GRID_ROWS;
+    this.lock.fillStyle(0x1a1a24, 0.78);
+    for (let row = 0; row < GRID_ROWS; row++) {
+      const interior = interiorBounds(row);
+      if (!interior) continue;
+      const x0 = -this.width_ / 2 + interior.left * cellW;
+      const x1 = -this.width_ / 2 + (interior.right + 1) * cellW;
+      const y0 = -this.height_ / 2 + row * cellH;
+      this.lock.fillRect(x0, y0, x1 - x0, cellH);
+    }
+
+    // A simple squared-off padlock glyph - straight segments read more
+    // clearly than a curved shackle at this size (same lesson as the Undo
+    // icon's redesign).
+    const bodyW = this.width_ * 0.26;
+    const bodyH = this.width_ * 0.2;
+    const bodyTop = -bodyH / 2;
+    const bodyBottom = bodyH / 2;
+    const shackleW = bodyW * 0.6;
+    const shackleTop = bodyTop - shackleW * 0.6;
+    const t = Math.max(2, this.width_ * 0.025);
+
+    this.lock.lineStyle(t, 0xffffff, 1);
+    this.lock.beginPath();
+    this.lock.moveTo(-shackleW / 2, bodyTop);
+    this.lock.lineTo(-shackleW / 2, shackleTop);
+    this.lock.lineTo(shackleW / 2, shackleTop);
+    this.lock.lineTo(shackleW / 2, bodyTop);
+    this.lock.strokePath();
+
+    this.lock.fillStyle(0xffffff, 1);
+    this.lock.fillRect(-bodyW / 2, bodyTop, bodyW, bodyH);
+
+    const keyR = bodyH * 0.16;
+    this.lock.fillStyle(0x1a1a24, 1);
+    this.lock.fillCircle(0, bodyTop + bodyH * 0.4, keyR);
+    this.lock.fillRect(-keyR * 0.4, bodyTop + bodyH * 0.4, keyR * 0.8, bodyBottom - (bodyTop + bodyH * 0.4) - 2);
   }
 }
