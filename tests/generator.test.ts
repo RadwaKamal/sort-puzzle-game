@@ -124,4 +124,21 @@ describe('generateLevel', () => {
     const level = generateLevel(19); // not a multiple of 7
     expect(level.locked).toBeNull();
   });
+
+  // Level Select has no fixed last page any more - generateLevel() needs to
+  // keep working indefinitely past the old 200-level list, not just up to
+  // it. colorsForLevel already plateaus at MAX_COLORS, so this is really
+  // checking that the hard/frozen/locked cadences (and their interaction,
+  // e.g. isLockedLevel's hard+fewer-flasks exclusion) stay well-behaved
+  // rather than, say, drifting into an unsolvable combination once the
+  // color count has been pinned at its cap for a long stretch of levels.
+  it('generates solvable levels well past the old 200-level list', () => {
+    for (const levelNumber of [201, 350, 500, 1000]) {
+      const level = generateLevel(levelNumber);
+      expect(level.numColors).toBe(12); // every one of these is past the color ramp
+      const result = solve(level.board, undefined, undefined, level.frozen, level.locked);
+      expect(result.solvable, `level ${levelNumber} should be solvable`).toBe(true);
+      expect(result.inconclusive, `level ${levelNumber} solve() should be conclusive`).toBeFalsy();
+    }
+  });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { computeStars } from '../src/core/scoring';
+import { computeStars, computeScore } from '../src/core/scoring';
+import { colorsForLevel } from '../src/core/generator';
 
 describe('computeStars', () => {
   it('awards 3 stars for matching or beating par', () => {
@@ -21,5 +22,28 @@ describe('computeStars', () => {
     expect(computeStars(1, 1)).toBe(3);
     expect(computeStars(2, 1)).toBe(2);
     expect(computeStars(3, 1)).toBe(1);
+  });
+});
+
+describe('computeScore', () => {
+  it('is 0 for no stored stars', () => {
+    expect(computeScore({})).toBe(0);
+  });
+
+  it('weights points by level difficulty (color count) and star rating', () => {
+    // Level 1 is always 3 colors (see colorsForLevel's own tests).
+    expect(computeScore({ '1': 1 })).toBe(colorsForLevel(1) * 100 * 1);
+    expect(computeScore({ '1': 2 })).toBe(colorsForLevel(1) * 100 * 1.5);
+    expect(computeScore({ '1': 3 })).toBe(colorsForLevel(1) * 100 * 2);
+  });
+
+  it('sums across every stored level', () => {
+    const level1Points = computeScore({ '1': 3 });
+    const level16Points = computeScore({ '16': 2 }); // colorsForLevel(16) = 4, a different tier than level 1
+    expect(computeScore({ '1': 3, '16': 2 })).toBe(level1Points + level16Points);
+  });
+
+  it('replaying a level for a better rating raises its contribution to the score', () => {
+    expect(computeScore({ '1': 3 })).toBeGreaterThan(computeScore({ '1': 1 }));
   });
 });

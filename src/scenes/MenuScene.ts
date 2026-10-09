@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import { theme } from '../theme';
 import { createButton } from '../view/button';
 import { createBoltMark } from '../view/boltMark';
-import { loadProgress } from '../services/storage';
+import { loadProgress, loadAllLevelStars } from '../services/storage';
+import { computeScore } from '../core/scoring';
 
 export class MenuScene extends Phaser.Scene {
   constructor() {
@@ -26,8 +27,22 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const progress = await loadProgress();
+    const [progress, stars] = await Promise.all([loadProgress(), loadAllLevelStars()]);
     const playLabel = progress.currentLevel > 1 ? 'Continue' : 'Play';
+
+    // Lifetime score, derived from stored stars rather than tracked
+    // separately - see computeScore's comment. Sits between the title and
+    // the buttons, a running total that only ever goes up (replaying a
+    // level for a better star rating raises it, same incentive the
+    // Level Select star row already creates).
+    this.add
+      .text(width / 2, height * 0.4, `Score: ${computeScore(stars).toLocaleString()}`, {
+        fontFamily: theme.font.family,
+        fontSize: `${theme.font.size.body}px`,
+        color: '#ffd23f',
+        shadow: { offsetX: 2, offsetY: 2, color: '#000000', blur: 0, fill: true },
+      })
+      .setOrigin(0.5);
 
     createButton(
       this,

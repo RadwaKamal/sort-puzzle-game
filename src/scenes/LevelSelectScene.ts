@@ -9,11 +9,18 @@ import type { Progress, LevelStars } from '../services/storage';
 
 const LEVELS_PER_PAGE = 20;
 const COLUMNS = 5;
-const MAX_LEVEL = 200;
-const MAX_PAGE = Math.floor((MAX_LEVEL - 1) / LEVELS_PER_PAGE);
+// No fixed last level - generateLevel() already works for any level number
+// (colorsForLevel caps the color count at MAX_COLORS, so difficulty
+// plateaus there rather than the level list needing to stop). Pagination
+// instead follows the player's own progress, with one page of lookahead so
+// the next page's still-locked cells are always visible as a preview of
+// what's coming, the same way the last page of the old fixed 200-level list
+// always showed a few locked cells past the unlocked frontier.
+const LOOKAHEAD_PAGES = 1;
 
 export class LevelSelectScene extends Phaser.Scene {
   private page = 0;
+  private maxPage = 0;
   private progress!: Progress;
   private stars: LevelStars = {};
   private gridContainer!: Phaser.GameObjects.Container;
@@ -27,6 +34,7 @@ export class LevelSelectScene extends Phaser.Scene {
     const { width, height } = this.scale;
     [this.progress, this.stars] = await Promise.all([loadProgress(), loadAllLevelStars()]);
     this.page = Math.floor((this.progress.unlockedLevel - 1) / LEVELS_PER_PAGE);
+    this.maxPage = this.page + LOOKAHEAD_PAGES;
 
     this.add
       .text(width / 2, 72, 'Select Level', {
@@ -80,7 +88,7 @@ export class LevelSelectScene extends Phaser.Scene {
   }
 
   private changePage(delta: number): void {
-    this.page = Phaser.Math.Clamp(this.page + delta, 0, MAX_PAGE);
+    this.page = Phaser.Math.Clamp(this.page + delta, 0, this.maxPage);
     this.renderPage();
   }
 
@@ -97,7 +105,6 @@ export class LevelSelectScene extends Phaser.Scene {
 
     for (let i = 0; i < LEVELS_PER_PAGE; i++) {
       const levelNumber = startLevel + i;
-      if (levelNumber > MAX_LEVEL) break;
 
       const col = i % COLUMNS;
       const row = Math.floor(i / COLUMNS);
@@ -120,7 +127,7 @@ export class LevelSelectScene extends Phaser.Scene {
       );
     }
 
-    this.pageText.setText(`Page ${this.page + 1} / ${MAX_PAGE + 1}`);
+    this.pageText.setText(`Page ${this.page + 1} / ${this.maxPage + 1}`);
   }
 
   // Lighter-weight than the shared Button (no drop shadow) so a 20-cell grid
