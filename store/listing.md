@@ -28,15 +28,26 @@ Tap a flask to pick it up, then tap another to pour. The top color pours
 across if it fits — empty flask, or matching color with room to spare. Clear
 every flask down to one color (or empty) to win the level.
 
-200 HAND-TUNED LEVELS
+ENDLESS, ALWAYS-SOLVABLE LEVELS
 Every level is generated from a seed and checked for a real solution before
 it's ever shown to you, so there's always a way through — no impossible
-boards. Difficulty ramps gradually from 3 colors up to 12 as you progress.
+boards. Difficulty ramps gradually from 3 colors up to 12 as you climb, and
+the levels never run out.
+
+NOT JUST SORTING
+Some levels mix it up: HARD levels pack a tighter, trickier layout, frozen
+flasks need a few moves before they'll pour, and locked flasks stay sealed
+shut until you solve a different flask first.
+
+EARN STARS, CHASE YOUR SCORE
+Solve a level in as few moves as possible to earn up to 3 stars, and watch
+your lifetime score climb — a reason to go back and improve an old level,
+not just push forward.
 
 HELPERS WHEN YOU'RE STUCK
 - Undo your last few moves for free, or keep going with a quick rewarded ad.
 - Add an extra empty flask to open up more room.
-- Skip a level that's got you stumped.
+- Stuck? Hint highlights your next move without solving it for you.
 
 FEELS GOOD TO PLAY
 Flasks tilt and pour with real liquid-flow animation, colors burst into
@@ -51,7 +62,7 @@ occasional ad between levels.
 No account needed. No internet required to play (only to show ads).
 ```
 
-(character count: 1287, well under the 4000 limit)
+(character count: 1769, well under the 4000 limit)
 
 ## Category
 
