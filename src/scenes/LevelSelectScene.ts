@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { theme } from '../theme';
-import { createButton } from '../view/button';
+import { createButton, Button } from '../view/button';
 import { drawPixelPanel } from '../view/pixelPanel';
 import { drawStarRow } from '../view/star';
 import { isFrozenLevel, isHardLevel, isLockedLevel } from '../core/generator';
@@ -25,6 +25,9 @@ export class LevelSelectScene extends Phaser.Scene {
   private stars: LevelStars = {};
   private gridContainer!: Phaser.GameObjects.Container;
   private pageText!: Phaser.GameObjects.Text;
+  private endOfProgressText!: Phaser.GameObjects.Text;
+  private prevButton!: Button;
+  private nextButton!: Button;
 
   constructor() {
     super('LevelSelect');
@@ -47,7 +50,7 @@ export class LevelSelectScene extends Phaser.Scene {
 
     createButton(this, 65, 30, 110, 36, '< Back', () => this.scene.start('Menu'), theme.accent.blue, '#ffffff');
 
-    createButton(
+    this.prevButton = createButton(
       this,
       width / 2 - 120,
       height - 60,
@@ -58,7 +61,7 @@ export class LevelSelectScene extends Phaser.Scene {
       theme.accent.blue,
       '#ffffff',
     );
-    createButton(
+    this.nextButton = createButton(
       this,
       width / 2 + 120,
       height - 60,
@@ -76,6 +79,24 @@ export class LevelSelectScene extends Phaser.Scene {
         color: '#ffffff',
       })
       .setOrigin(0.5);
+
+    // Shown only on the last reachable page (the lookahead page past the
+    // player's own unlocked frontier) - without this, "Page 4 / 4" reads as
+    // "that's the whole game, only 4 pages exist" once a player taps Next
+    // enough times, even though the level list has no end (only the preview
+    // window does, until they unlock further). Sits in the open space below
+    // the grid rather than squeezed into the pageText slot between the
+    // Prev/Next buttons, which is too narrow for a full sentence.
+    this.endOfProgressText = this.add
+      .text(width / 2, 580, "That's as far as you've unlocked -\nkeep playing to reveal more!", {
+        fontFamily: theme.font.family,
+        fontSize: `${theme.font.size.small}px`,
+        color: '#ffd23f',
+        align: 'center',
+        lineSpacing: 6,
+      })
+      .setOrigin(0.5)
+      .setVisible(false);
 
     this.gridContainer = this.add.container(0, 0);
     this.renderPage();
@@ -128,6 +149,17 @@ export class LevelSelectScene extends Phaser.Scene {
     }
 
     this.pageText.setText(`Page ${this.page + 1} / ${this.maxPage + 1}`);
+
+    // Dim (rather than fully disable) Prev/Next at the ends - changePage()
+    // already clamps safely, so tapping a dimmed button is harmless, but
+    // leaving them full-brightness made the dead end at the last reachable
+    // page look identical to every other "keep going" tap, which is exactly
+    // what read as "this is the end of the whole game" (see
+    // endOfProgressText's comment).
+    const DISABLED_ACCENT = 0x4a4a58;
+    this.prevButton.setAccent(this.page <= 0 ? DISABLED_ACCENT : theme.accent.blue);
+    this.nextButton.setAccent(this.page >= this.maxPage ? DISABLED_ACCENT : theme.accent.blue);
+    this.endOfProgressText.setVisible(this.page >= this.maxPage);
   }
 
   // Lighter-weight than the shared Button (no drop shadow) so a 20-cell grid
