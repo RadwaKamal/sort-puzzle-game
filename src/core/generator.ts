@@ -38,7 +38,11 @@ const EMPTY_FLASKS = 2;
 const HARD_EMPTY_FLASKS = 1;
 const HARD_FEWER_FLASKS_MAX_COLORS = 7;
 // How many level numbers it takes to ramp from MIN_COLORS to MAX_COLORS.
-const LEVELS_PER_COLOR_TIER = 20;
+// Was 20 (reaching the 12-color cap at level 181, only 20 levels before the
+// 200-level arc ends) - tightened to 15 so the back third of the arc
+// (level 136 on) spends more time at the harder end instead of the easy
+// ramp eating most of the level list.
+const LEVELS_PER_COLOR_TIER = 15;
 // Every 3rd level is a spotlighted hard level - same color-count tier as its
 // neighbors, but tighter on space and biased toward gnarlier shuffles.
 const HARD_LEVEL_INTERVAL = 3;
@@ -105,10 +109,14 @@ export function generateLevel(levelNumber: number): Level {
   const numFlasks = numColors + (hardFewerFlasks ? HARD_EMPTY_FLASKS : EMPTY_FLASKS);
   // Require at least a few real moves so a shuffle that happens to come out
   // nearly sorted doesn't get served up as a "level". Hard levels additionally
-  // bias toward gnarlier shuffles by raising that bar. This is purely a
-  // generation-acceptance threshold, not the returned Level's parMoves (see
-  // that field's comment) - a candidate board just has to meet or beat it.
-  const minMoves = isHard ? Math.ceil(numColors * 1.3) : numColors;
+  // bias toward gnarlier shuffles by raising that bar further. Even the
+  // normal-level bar is above a flat `numColors` (was, until this got tuned
+  // harder) - a small multiplier keeps every level from occasionally
+  // generating a borderline-trivial shuffle, not just hard ones. This is
+  // purely a generation-acceptance threshold, not the returned Level's
+  // parMoves (see that field's comment) - a candidate board just has to meet
+  // or beat it.
+  const minMoves = Math.ceil(numColors * (isHard ? 1.3 : 1.15));
   const frozenThisLevel = isFrozenLevel(levelNumber);
 
   for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {

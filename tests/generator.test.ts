@@ -5,8 +5,8 @@ import { solve } from '../src/core/solver';
 describe('colorsForLevel', () => {
   it('starts at 3 colors and caps at 12', () => {
     expect(colorsForLevel(1)).toBe(3);
-    expect(colorsForLevel(20)).toBe(3);
-    expect(colorsForLevel(21)).toBe(4);
+    expect(colorsForLevel(15)).toBe(3);
+    expect(colorsForLevel(16)).toBe(4);
     expect(colorsForLevel(2000)).toBe(12);
   });
 });
@@ -53,14 +53,22 @@ describe('generateLevel', () => {
     expect(emptyFlasks.length).toBe(1);
   });
 
-  it('every generated level for levels 1-200 is solvable (respecting its frozen flask, if any)', () => {
-    for (let levelNumber = 1; levelNumber <= 200; levelNumber++) {
-      const level = generateLevel(levelNumber);
-      const result = solve(level.board, undefined, undefined, level.frozen);
-      expect(result.solvable, `level ${levelNumber} should be solvable`).toBe(true);
-      expect(result.inconclusive, `level ${levelNumber} solve() should be conclusive`).toBeFalsy();
-    }
-  });
+  it(
+    'every generated level for levels 1-200 is solvable (respecting its frozen flask, if any)',
+    () => {
+      for (let levelNumber = 1; levelNumber <= 200; levelNumber++) {
+        const level = generateLevel(levelNumber);
+        const result = solve(level.board, undefined, undefined, level.frozen);
+        expect(result.solvable, `level ${levelNumber} should be solvable`).toBe(true);
+        expect(result.inconclusive, `level ${levelNumber} solve() should be conclusive`).toBeFalsy();
+      }
+    },
+    // The steeper color ramp means more of the 200 levels now sit at the
+    // 12-color cap (and are also solved twice here - once inside
+    // generateLevel, once again to verify) - comfortably over the default
+    // 5s budget even though each individual level still generates fast.
+    30_000,
+  );
 
   it('parMoves matches the solver\'s actual move count for that exact board, not just a threshold', () => {
     const level = generateLevel(50);

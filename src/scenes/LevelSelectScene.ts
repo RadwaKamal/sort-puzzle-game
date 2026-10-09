@@ -158,57 +158,28 @@ export class LevelSelectScene extends Phaser.Scene {
       { fillColor: fill, outlineColor: border, highlightAlpha: unlocked ? 0.22 : 0.08 },
     );
 
-    if (hard) {
-      const bx = size / 2 - 8;
+    // Hard (top-right, white) and frozen (top-left, icy blue) each get their
+    // own small corner diamond - same shape, mirrored corner, different
+    // fill, so the two are readable independently and compose when a level
+    // is both.
+    const drawCornerDiamond = (cornerX: number, fillColor: number): void => {
+      const bx = cornerX;
       const by = -size / 2 + 8;
       const r = 6;
-      outline.fillStyle(0xffffff, 1);
-      outline.fillPoints(
-        [
-          { x: bx, y: by - r },
-          { x: bx + r, y: by },
-          { x: bx, y: by + r },
-          { x: bx - r, y: by },
-        ],
-        true,
-      );
+      const points = [
+        { x: bx, y: by - r },
+        { x: bx + r, y: by },
+        { x: bx, y: by + r },
+        { x: bx - r, y: by },
+      ];
+      outline.fillStyle(fillColor, 1);
+      outline.fillPoints(points, true);
       outline.lineStyle(1.5, 0x0d0d14, 1);
-      outline.strokePoints(
-        [
-          { x: bx, y: by - r },
-          { x: bx + r, y: by },
-          { x: bx, y: by + r },
-          { x: bx - r, y: by },
-        ],
-        true,
-      );
-    }
+      outline.strokePoints(points, true);
+    };
 
-    if (frozen) {
-      const bx = -size / 2 + 8;
-      const by = -size / 2 + 8;
-      const r = 6;
-      outline.fillStyle(0xbfe9ff, 1);
-      outline.fillPoints(
-        [
-          { x: bx, y: by - r },
-          { x: bx + r, y: by },
-          { x: bx, y: by + r },
-          { x: bx - r, y: by },
-        ],
-        true,
-      );
-      outline.lineStyle(1.5, 0x0d0d14, 1);
-      outline.strokePoints(
-        [
-          { x: bx, y: by - r },
-          { x: bx + r, y: by },
-          { x: bx, y: by + r },
-          { x: bx - r, y: by },
-        ],
-        true,
-      );
-    }
+    if (hard) drawCornerDiamond(size / 2 - 8, 0xffffff);
+    if (frozen) drawCornerDiamond(-size / 2 + 8, 0xbfe9ff);
 
     const label = this.add
       .text(0, 0, String(levelNumber), {

@@ -134,7 +134,7 @@ function search(
     return { solvable: true, moveCount: 0, firstMove: null };
   }
 
-  const isFrozenAt = (totalMoves: number) => (index: number): boolean =>
+  const isFrozenFlask = (totalMoves: number, index: number): boolean =>
     frozen !== null && index === frozen.flaskIndex && totalMoves < frozen.thawAtMove;
 
   const visited = new Set<string>([hashBoard(board)]);
@@ -147,7 +147,11 @@ function search(
     }
 
     const node = open.pop();
-    const frozenCheck = isFrozenAt(startMoves + node.moves);
+    // Only builds the per-node adapter closure when a frozen flask is
+    // actually in play - most searches (non-frozen levels) skip it entirely,
+    // and this loop can pop tens of thousands of nodes.
+    const totalMoves = startMoves + node.moves;
+    const frozenCheck = frozen ? (index: number) => isFrozenFlask(totalMoves, index) : undefined;
 
     for (const move of getLegalMoves(node.board, capacity, frozenCheck)) {
       const [from, to] = move;

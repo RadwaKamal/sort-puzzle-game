@@ -497,10 +497,9 @@ export class GameScene extends Phaser.Scene {
       );
     }
 
-    const activeBadges = [
-      ...(this.level.isHard ? [this.hardBadge] : []),
-      ...(this.level.frozen ? [this.frozenBadge] : []),
-    ];
+    const activeBadges: Phaser.GameObjects.Container[] = [];
+    if (this.level.isHard) activeBadges.push(this.hardBadge);
+    if (this.level.frozen) activeBadges.push(this.frozenBadge);
     const totalW = activeBadges.length * badgeW + Math.max(0, activeBadges.length - 1) * gap;
     let x = midX - totalW / 2 + badgeW / 2;
     for (const badge of activeBadges) {
