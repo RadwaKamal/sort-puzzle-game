@@ -41,10 +41,13 @@ export class FlaskView extends Phaser.GameObjects.Container {
   private readonly glassShine: Phaser.GameObjects.Graphics;
   private readonly cap: Phaser.GameObjects.Graphics;
   private readonly outline: Phaser.GameObjects.Graphics;
+  private readonly frost: Phaser.GameObjects.Graphics;
+  private readonly frostText: Phaser.GameObjects.Text;
   private width_ = 0;
   private height_ = 0;
   private selected = false;
   private moveTween?: Phaser.Tweens.Tween;
+  private frozenMovesRemaining = 0;
   layoutX = 0;
   layoutY = 0;
 
@@ -58,7 +61,26 @@ export class FlaskView extends Phaser.GameObjects.Container {
     this.glassShine = scene.add.graphics();
     this.cap = scene.add.graphics();
     this.outline = scene.add.graphics();
-    this.add([this.shadow, this.background, this.liquid, this.glassShine, this.outline, this.cap]);
+    this.frost = scene.add.graphics();
+    this.frostText = scene.add
+      .text(0, 0, '', {
+        fontFamily: theme.font.family,
+        fontSize: '16px',
+        color: '#0d3b52',
+        shadow: { offsetX: 1, offsetY: 1, color: '#ffffff', blur: 0, fill: true },
+      })
+      .setOrigin(0.5)
+      .setVisible(false);
+    this.add([
+      this.shadow,
+      this.background,
+      this.liquid,
+      this.glassShine,
+      this.outline,
+      this.frost,
+      this.frostText,
+      this.cap,
+    ]);
 
     this.setSize(0, 0);
     this.on('pointerdown', () => onTap(this.index));
@@ -98,6 +120,7 @@ export class FlaskView extends Phaser.GameObjects.Container {
     // silently only catches the top-left quadrant of clicks; it must be (0, 0, w, h).
     this.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
     this.drawShell();
+    this.drawFrost();
   }
 
   // Slides to a new home position (used to regroup sealed flasks to the
@@ -377,5 +400,37 @@ export class FlaskView extends Phaser.GameObjects.Container {
     this.cap.fillRect(x0, y0, x1 - x0, bevel);
     this.cap.lineStyle(2, theme.flask.outline, 1);
     this.cap.strokeRect(x0, y0, x1 - x0, capH);
+  }
+
+  // Iced-over flasks (the occasional frozen-level twist) can't be poured
+  // *from* until `movesRemaining` more real moves happen - the player can
+  // still see the colors underneath (the tint is translucent, not opaque),
+  // just not touch them yet. A countdown number ticks down live off
+  // GameScene's move count, so it naturally re-freezes on undo for free.
+  setFrozen(movesRemaining: number): void {
+    this.frozenMovesRemaining = Math.max(0, movesRemaining);
+    this.drawFrost();
+  }
+
+  private drawFrost(): void {
+    this.frost.clear();
+    if (this.frozenMovesRemaining <= 0) {
+      this.frostText.setVisible(false);
+      return;
+    }
+
+    const cellW = this.width_ / GRID_COLS;
+    const cellH = this.height_ / GRID_ROWS;
+    this.frost.fillStyle(0xbfe9ff, 0.55);
+    for (let row = 0; row < GRID_ROWS; row++) {
+      const interior = interiorBounds(row);
+      if (!interior) continue;
+      const x0 = -this.width_ / 2 + interior.left * cellW;
+      const x1 = -this.width_ / 2 + (interior.right + 1) * cellW;
+      const y0 = -this.height_ / 2 + row * cellH;
+      this.frost.fillRect(x0, y0, x1 - x0, cellH);
+    }
+
+    this.frostText.setVisible(true).setText(String(this.frozenMovesRemaining)).setPosition(0, 0);
   }
 }

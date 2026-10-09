@@ -92,10 +92,18 @@ export function applyMove(
   return newBoard;
 }
 
-export function getLegalMoves(board: Board, capacity = LAYERS_PER_FLASK): [number, number][] {
+// `isFrozen`, if given, is asked per source flask index - lets callers (the
+// solver, mid-search) block pouring out of a flask that's still iced over
+// without board.ts needing to know anything about moves-elapsed or levels.
+export function getLegalMoves(
+  board: Board,
+  capacity = LAYERS_PER_FLASK,
+  isFrozen?: (index: number) => boolean,
+): [number, number][] {
   const moves: [number, number][] = [];
   for (let from = 0; from < board.length; from++) {
     if (isFlaskEmpty(board[from])) continue;
+    if (isFrozen?.(from)) continue;
     for (let to = 0; to < board.length; to++) {
       if (from === to) continue;
       if (canPour(board[from], board[to], capacity)) {

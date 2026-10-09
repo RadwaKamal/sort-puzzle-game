@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { colorsForLevel, generateLevel, isHardLevel } from '../src/core/generator';
+import { colorsForLevel, generateLevel, isFrozenLevel, isHardLevel } from '../src/core/generator';
 import { solve } from '../src/core/solver';
 
 describe('colorsForLevel', () => {
@@ -18,6 +18,15 @@ describe('isHardLevel', () => {
     expect(isHardLevel(1)).toBe(false);
     expect(isHardLevel(2)).toBe(false);
     expect(isHardLevel(4)).toBe(false);
+  });
+});
+
+describe('isFrozenLevel', () => {
+  it('flags every 5th level from level 10 on, and only those', () => {
+    expect(isFrozenLevel(10)).toBe(true);
+    expect(isFrozenLevel(15)).toBe(true);
+    expect(isFrozenLevel(5)).toBe(false);
+    expect(isFrozenLevel(9)).toBe(false);
   });
 });
 
@@ -44,10 +53,10 @@ describe('generateLevel', () => {
     expect(emptyFlasks.length).toBe(1);
   });
 
-  it('every generated level for levels 1-200 is solvable', () => {
+  it('every generated level for levels 1-200 is solvable (respecting its frozen flask, if any)', () => {
     for (let levelNumber = 1; levelNumber <= 200; levelNumber++) {
       const level = generateLevel(levelNumber);
-      const result = solve(level.board);
+      const result = solve(level.board, undefined, undefined, level.frozen);
       expect(result.solvable, `level ${levelNumber} should be solvable`).toBe(true);
       expect(result.inconclusive, `level ${levelNumber} solve() should be conclusive`).toBeFalsy();
     }
@@ -55,8 +64,22 @@ describe('generateLevel', () => {
 
   it('parMoves matches the solver\'s actual move count for that exact board, not just a threshold', () => {
     const level = generateLevel(50);
-    const result = solve(level.board);
+    const result = solve(level.board, undefined, undefined, level.frozen);
     expect(level.parMoves).toBe(result.moveCount);
     expect(level.parMoves).toBeGreaterThan(0);
+  });
+
+  it('frozen levels freeze one of the starting color flasks, with a thaw threshold the solve respects', () => {
+    const level = generateLevel(10); // 10 >= 10 && 10 % 5 === 0
+    expect(level.frozen).not.toBeNull();
+    const frozen = level.frozen!;
+    expect(frozen.flaskIndex).toBeGreaterThanOrEqual(0);
+    expect(frozen.flaskIndex).toBeLessThan(level.numColors);
+    expect(frozen.thawAtMove).toBeGreaterThan(0);
+  });
+
+  it('non-frozen levels have a null frozen field', () => {
+    const level = generateLevel(11); // not a multiple of 5
+    expect(level.frozen).toBeNull();
   });
 });

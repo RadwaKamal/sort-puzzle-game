@@ -14,6 +14,15 @@
 import { applyMove, getLegalMoves, hashBoard, isBoardSolved, LAYERS_PER_FLASK } from './board';
 import type { Board } from './board';
 
+// A single flask that can't be poured *from* until `thawAtMove` real moves
+// have been made since the level started (pouring *into* it is unaffected).
+// `thawAtMove` is always relative to level start, not to wherever a given
+// search happens to begin - see `startMoves` below.
+export interface FrozenSpec {
+  flaskIndex: number;
+  thawAtMove: number;
+}
+
 export interface SolveResult {
   solvable: boolean;
   // Moves in the solution found. Not guaranteed to be the shortest possible.
@@ -110,10 +119,23 @@ class MinHeap {
   }
 }
 
-function search(board: Board, capacity: number, maxStates: number): SearchResult {
+// `startMoves` offsets `node.moves` (depth within *this* search) so a
+// mid-game Hint search - which starts from the player's current board, not
+// the level's original one - still checks the frozen flask's thaw threshold
+// against real moves-since-level-start, not moves-since-this-search-began.
+function search(
+  board: Board,
+  capacity: number,
+  maxStates: number,
+  frozen: FrozenSpec | null,
+  startMoves: number,
+): SearchResult {
   if (isBoardSolved(board, capacity)) {
     return { solvable: true, moveCount: 0, firstMove: null };
   }
+
+  const isFrozenAt = (totalMoves: number) => (index: number): boolean =>
+    frozen !== null && index === frozen.flaskIndex && totalMoves < frozen.thawAtMove;
 
   const visited = new Set<string>([hashBoard(board)]);
   const open = new MinHeap();
@@ -125,8 +147,9 @@ function search(board: Board, capacity: number, maxStates: number): SearchResult
     }
 
     const node = open.pop();
+    const frozenCheck = isFrozenAt(startMoves + node.moves);
 
-    for (const move of getLegalMoves(node.board, capacity)) {
+    for (const move of getLegalMoves(node.board, capacity, frozenCheck)) {
       const [from, to] = move;
       const next = applyMove(node.board, from, to, capacity);
       const key = hashBoard(next);
@@ -149,20 +172,27 @@ export function solve(
   board: Board,
   capacity = LAYERS_PER_FLASK,
   maxStates = DEFAULT_MAX_STATES,
+  frozen: FrozenSpec | null = null,
+  startMoves = 0,
 ): SolveResult {
-  const result = search(board, capacity, maxStates);
+  const result = search(board, capacity, maxStates, frozen, startMoves);
   return { solvable: result.solvable, moveCount: result.moveCount, inconclusive: result.inconclusive };
 }
 
 // The move (source flask, target flask) that starts a solution from the
 // current board - used by the in-game hint button. Returns null if the
 // board is already solved or no solution could be found within maxStates.
+// `startMoves` should be the real moves made so far this level (see
+// `search`'s comment) so a frozen flask's thaw threshold stays correct when
+// hinting mid-game rather than from a fresh board.
 export function findHintMove(
   board: Board,
   capacity = LAYERS_PER_FLASK,
   maxStates = DEFAULT_MAX_STATES,
+  frozen: FrozenSpec | null = null,
+  startMoves = 0,
 ): Move | null {
-  const result = search(board, capacity, maxStates);
+  const result = search(board, capacity, maxStates, frozen, startMoves);
   if (!result.solvable) return null;
   return result.firstMove;
 }

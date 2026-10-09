@@ -7,6 +7,7 @@ import { createEmptyFlask, LAYERS_PER_FLASK } from './board';
 import type { Board, Color } from './board';
 import { SeededRng } from './rng';
 import { solve } from './solver';
+import type { FrozenSpec } from './solver';
 
 export interface Level {
   levelNumber: number;
@@ -20,6 +21,8 @@ export interface Level {
   // optimum - see solver.ts's module comment.
   parMoves: number;
   isHard: boolean;
+  // null on every level except the occasional frozen one (see isFrozenLevel).
+  frozen: FrozenSpec | null;
 }
 
 const MIN_COLORS = 3;
@@ -39,6 +42,20 @@ const LEVELS_PER_COLOR_TIER = 20;
 // Every 3rd level is a spotlighted hard level - same color-count tier as its
 // neighbors, but tighter on space and biased toward gnarlier shuffles.
 const HARD_LEVEL_INTERVAL = 3;
+// A different spotlighted twist, offset from the hard-level cadence so the
+// two only coincide occasionally (every lcm(3,5) = 15 levels) rather than
+// every single special level being a double-whammy. Starts a bit later than
+// hard levels so the player meets sealing/hard first before a second rule
+// shows up.
+const FROZEN_LEVEL_START = 10;
+const FROZEN_LEVEL_INTERVAL = 5;
+// How far into the level's typical solve length a frozen flask stays iced -
+// long enough to force planning around it, short enough that it's not just
+// dead time. Applied to the generation-acceptance move bar (minMoves below),
+// not the solver's real parMoves, since parMoves isn't known until the
+// board - including the freeze - has actually been solved.
+const FROZEN_THAW_FRACTION = 0.4;
+const FROZEN_THAW_MIN_MOVES = 2;
 
 const MAX_GENERATION_ATTEMPTS = 500;
 
@@ -49,6 +66,10 @@ export function colorsForLevel(levelNumber: number): number {
 
 export function isHardLevel(levelNumber: number): boolean {
   return levelNumber % HARD_LEVEL_INTERVAL === 0;
+}
+
+export function isFrozenLevel(levelNumber: number): boolean {
+  return levelNumber >= FROZEN_LEVEL_START && levelNumber % FROZEN_LEVEL_INTERVAL === 0;
 }
 
 // A deterministic per-attempt seed so retries are reproducible: the same
@@ -88,14 +109,25 @@ export function generateLevel(levelNumber: number): Level {
   // generation-acceptance threshold, not the returned Level's parMoves (see
   // that field's comment) - a candidate board just has to meet or beat it.
   const minMoves = isHard ? Math.ceil(numColors * 1.3) : numColors;
+  const frozenThisLevel = isFrozenLevel(levelNumber);
 
   for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {
     const rng = new SeededRng(seedForAttempt(levelNumber, attempt));
     const board = buildCandidateBoard(rng, numColors, numFlasks);
-    const result = solve(board);
+    // Only ever freezes one of the starting color flasks (indices
+    // 0..numColors-1 per buildCandidateBoard) - the free empty flasks are
+    // the player's maneuvering room, freezing one of those would just be a
+    // no-op since there'd be nothing in it to pour out anyway.
+    const frozen: FrozenSpec | null = frozenThisLevel
+      ? {
+          flaskIndex: rng.nextInt(0, numColors - 1),
+          thawAtMove: Math.max(FROZEN_THAW_MIN_MOVES, Math.round(minMoves * FROZEN_THAW_FRACTION)),
+        }
+      : null;
+    const result = solve(board, LAYERS_PER_FLASK, undefined, frozen);
 
     if (result.solvable && !result.inconclusive && (result.moveCount ?? 0) >= minMoves) {
-      return { levelNumber, numColors, board, parMoves: result.moveCount as number, isHard };
+      return { levelNumber, numColors, board, parMoves: result.moveCount as number, isHard, frozen };
     }
   }
 

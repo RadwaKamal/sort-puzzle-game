@@ -81,6 +81,10 @@ export class GameScene extends Phaser.Scene {
   // unlimited ad-gated uses would let a player trivialize any level by just
   // watching enough ads.
   private extraFlaskUsed = false;
+  // Tracks the frozen flask's last-rendered countdown so updateFrostOverlay
+  // can detect the exact moment it hits 0 and fire a one-off thaw sparkle,
+  // instead of re-celebrating on every subsequent move once already thawed.
+  private lastFrozenRemaining: number | null = null;
 
   private flaskViews: FlaskView[] = [];
   private levelText!: Phaser.GameObjects.Text;
@@ -428,7 +432,9 @@ export class GameScene extends Phaser.Scene {
     );
     for (const view of this.flaskViews) this.add.existing(view);
 
+    this.lastFrozenRemaining = null;
     this.relayout();
+    this.updateFrostOverlay();
   }
 
   // Positions the "HARD" pill just to the right of the level title - must
@@ -566,9 +572,10 @@ export class GameScene extends Phaser.Scene {
     if (this.won || this.animating || this.settingsOpen) return;
 
     if (this.selectedIndex === null) {
-      if (isFlaskSealed(this.board[index], LAYERS_PER_FLASK)) {
+      if (isFlaskSealed(this.board[index], LAYERS_PER_FLASK) || this.isFlaskFrozenNow(index)) {
         // Sealed flasks hold every unit of their color - there's never a
-        // legal pour out of one, so say so instead of silently ignoring it.
+        // legal pour out of one. A still-frozen flask just isn't thawed
+        // yet. Both read the same to the player: shake it, say no.
         this.audio.play('error');
         this.audio.haptic('error');
         this.flaskViews[index].shake();
@@ -691,7 +698,8 @@ export class GameScene extends Phaser.Scene {
 
     if (!wasSolved && isSolvedNow) {
       targetView.squashBounce();
-      this.spawnSparkle(targetView.layoutX, targetView.layoutY, this.board[targetIndex][0]);
+      const color = this.board[targetIndex][0];
+      this.spawnSparkle(targetView.layoutX, targetView.layoutY, theme.liquidColors[color % theme.liquidColors.length]);
       this.audio.play('complete');
       this.audio.haptic('complete');
 
@@ -702,11 +710,34 @@ export class GameScene extends Phaser.Scene {
       });
     }
 
+    this.updateFrostOverlay();
     this.checkWin();
   }
 
-  private spawnSparkle(x: number, y: number, color: Color): void {
-    const tint = theme.liquidColors[color % theme.liquidColors.length];
+  // Keeps the frozen flask's countdown in sync with the live move count -
+  // called after anything that changes history.length (a pour, an undo) and
+  // once on load. Reads straight off the current count rather than tracking
+  // its own, so undo naturally re-freezes it for free (see FlaskView.setFrozen).
+  private updateFrostOverlay(): void {
+    const frozen = this.level.frozen;
+    if (!frozen) return;
+
+    const remaining = Math.max(0, frozen.thawAtMove - this.history.length);
+    const view = this.flaskViews[frozen.flaskIndex];
+    view.setFrozen(remaining);
+
+    if (this.lastFrozenRemaining !== null && this.lastFrozenRemaining > 0 && remaining === 0) {
+      this.spawnSparkle(view.layoutX, view.layoutY, 0xbfe9ff);
+    }
+    this.lastFrozenRemaining = remaining;
+  }
+
+  private isFlaskFrozenNow(index: number): boolean {
+    const frozen = this.level.frozen;
+    return frozen !== null && frozen.flaskIndex === index && this.history.length < frozen.thawAtMove;
+  }
+
+  private spawnSparkle(x: number, y: number, tint: number): void {
     const emitter = this.add.particles(x, y, PARTICLE_TEXTURE, {
       tint,
       speed: { min: 80, max: 160 },
@@ -780,6 +811,7 @@ export class GameScene extends Phaser.Scene {
       this.selectedIndex = null;
     }
     this.board = this.history.pop() as Board;
+    this.updateFrostOverlay();
     this.relayout(true);
   }
 
@@ -875,7 +907,10 @@ export class GameScene extends Phaser.Scene {
     this.hintsUsed++;
     this.updateHintButtonLabel();
 
-    const move = findHintMove(this.board);
+    // startMoves (this.history.length) keeps the frozen flask's thaw
+    // threshold correct even when hinting isn't from the level's original
+    // board - see findHintMove's comment.
+    const move = findHintMove(this.board, LAYERS_PER_FLASK, undefined, this.level.frozen, this.history.length);
     if (!move) return;
     const [from, to] = move;
     this.flaskViews[from].hintPulse();
