@@ -3,7 +3,7 @@ import { theme } from '../theme';
 import { createButton } from '../view/button';
 import { drawPixelPanel } from '../view/pixelPanel';
 import { drawStarRow } from '../view/star';
-import { isFrozenLevel, isHardLevel } from '../core/generator';
+import { isFrozenLevel, isHardLevel, isLockedLevel } from '../core/generator';
 import { loadProgress, loadAllLevelStars } from '../services/storage';
 import type { Progress, LevelStars } from '../services/storage';
 
@@ -114,6 +114,7 @@ export class LevelSelectScene extends Phaser.Scene {
           unlocked,
           isHardLevel(levelNumber),
           isFrozenLevel(levelNumber),
+          isLockedLevel(levelNumber),
           this.stars[levelNumber] ?? 0,
         ),
       );
@@ -128,9 +129,10 @@ export class LevelSelectScene extends Phaser.Scene {
   // levels (every 3rd) get a pink fill instead of yellow plus a small corner
   // diamond, so they're distinguishable even for colorblind players, not
   // just by hue. Frozen levels (every 5th from 10 on) get a second, icy-blue
-  // diamond in the opposite corner - a separate shape+corner rather than a
-  // fill-color change, since fill is already spoken for by hard/normal and
-  // the two twists occasionally land on the same level.
+  // diamond in the opposite (top-left) corner, and locked levels (every 7th
+  // from 14 on) a third, grey diamond bottom-right - a separate shape+corner
+  // per twist rather than a fill-color change, since fill is already spoken
+  // for by hard/normal and twists occasionally land on the same level.
   private createLevelCell(
     x: number,
     y: number,
@@ -139,6 +141,7 @@ export class LevelSelectScene extends Phaser.Scene {
     unlocked: boolean,
     hard: boolean,
     frozen: boolean,
+    locked: boolean,
     starsEarned: number,
   ): Phaser.GameObjects.Container {
     // Blue rather than yellow for normal cells - yellow is also the star
@@ -158,19 +161,15 @@ export class LevelSelectScene extends Phaser.Scene {
       { fillColor: fill, outlineColor: border, highlightAlpha: unlocked ? 0.22 : 0.08 },
     );
 
-    // Hard (top-right, white) and frozen (top-left, icy blue) each get their
-    // own small corner diamond - same shape, mirrored corner, different
-    // fill, so the two are readable independently and compose when a level
-    // is both.
-    const drawCornerDiamond = (cornerX: number, fillColor: number): void => {
-      const bx = cornerX;
-      const by = -size / 2 + 8;
-      const r = 6;
+    // Hard/frozen/locked each get their own small corner diamond - same
+    // shape, different corner + fill, so all three are readable
+    // independently and compose when a level has more than one.
+    const drawCornerDiamond = (cornerX: number, cornerY: number, fillColor: number, r = 6): void => {
       const points = [
-        { x: bx, y: by - r },
-        { x: bx + r, y: by },
-        { x: bx, y: by + r },
-        { x: bx - r, y: by },
+        { x: cornerX, y: cornerY - r },
+        { x: cornerX + r, y: cornerY },
+        { x: cornerX, y: cornerY + r },
+        { x: cornerX - r, y: cornerY },
       ];
       outline.fillStyle(fillColor, 1);
       outline.fillPoints(points, true);
@@ -178,8 +177,12 @@ export class LevelSelectScene extends Phaser.Scene {
       outline.strokePoints(points, true);
     };
 
-    if (hard) drawCornerDiamond(size / 2 - 8, 0xffffff);
-    if (frozen) drawCornerDiamond(-size / 2 + 8, 0xbfe9ff);
+    if (hard) drawCornerDiamond(size / 2 - 8, -size / 2 + 8, 0xffffff);
+    if (frozen) drawCornerDiamond(-size / 2 + 8, -size / 2 + 8, 0xbfe9ff);
+    // Smaller and tucked further into the corner than hard/frozen's - this
+    // one shares the bottom edge with the star row, so it needs the extra
+    // clearance (stars are also pulled in slightly below, see starsGfx).
+    if (locked) drawCornerDiamond(size / 2 - 7, size / 2 - 7, 0x4a4a58, 5);
 
     const label = this.add
       .text(0, 0, String(levelNumber), {
@@ -198,8 +201,10 @@ export class LevelSelectScene extends Phaser.Scene {
     const starsGfx = this.add.graphics();
     if (unlocked && starsEarned > 0) {
       // Same gold as the win overlay - now that normal cells are blue
-      // rather than yellow, gold reads fine here too.
-      drawStarRow(starsGfx, 0, size / 2 - 9, 10, 2, starsEarned);
+      // rather than yellow, gold reads fine here too. Slightly smaller than
+      // the win overlay's own call to this (10px there) so the row doesn't
+      // reach the locked badge's corner when a level is both.
+      drawStarRow(starsGfx, 0, size / 2 - 9, 8, 2, starsEarned);
     }
 
     const container = this.add.container(x, y, [box, bevel, outline, label, starsGfx]);

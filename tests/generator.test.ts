@@ -33,9 +33,18 @@ describe('isFrozenLevel', () => {
 describe('isLockedLevel', () => {
   it('flags every 7th level from level 14 on, and only those', () => {
     expect(isLockedLevel(14)).toBe(true);
-    expect(isLockedLevel(21)).toBe(true);
+    expect(isLockedLevel(28)).toBe(true);
     expect(isLockedLevel(7)).toBe(false);
     expect(isLockedLevel(13)).toBe(false);
+  });
+
+  it('excludes cadence-eligible levels where hard is also using its reduced-flask mode', () => {
+    // 21 % 7 === 0 and 21 % 3 === 0 (hard), with colorsForLevel(21) = 4
+    // (<= HARD_FEWER_FLASKS_MAX_COLORS) - hard's flask reduction applies,
+    // so locking is skipped here even though the cadence alone would flag it.
+    expect(isHardLevel(21)).toBe(true);
+    expect(colorsForLevel(21)).toBeLessThanOrEqual(7);
+    expect(isLockedLevel(21)).toBe(false);
   });
 });
 

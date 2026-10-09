@@ -88,8 +88,21 @@ export function isFrozenLevel(levelNumber: number): boolean {
   return levelNumber >= FROZEN_LEVEL_START && levelNumber % FROZEN_LEVEL_INTERVAL === 0;
 }
 
+// Cadence alone isn't the whole story: locking removes legal moves the same
+// way hard's flask-count reduction does, and stacking both compounds
+// multiplicatively, not additively (measured directly - a hard, <=7-color,
+// cadence-eligible level was 0/500 solvable attempts with both constraints
+// applied together, even though each is fine alone). So a level only
+// actually locks if it's cadence-eligible AND hard isn't also using its
+// risky reduced-flask mode here. This exclusion lives here (not just
+// inline in generateLevel()) so every caller - generation, the Level Select
+// grid's telegraph badge, anything else - agrees on which levels are
+// *actually* locked, not just cadence-eligible.
 export function isLockedLevel(levelNumber: number): boolean {
-  return levelNumber >= LOCK_LEVEL_START && levelNumber % LOCK_LEVEL_INTERVAL === 0;
+  const cadence = levelNumber >= LOCK_LEVEL_START && levelNumber % LOCK_LEVEL_INTERVAL === 0;
+  if (!cadence) return false;
+  const hardFewerFlasks = isHardLevel(levelNumber) && colorsForLevel(levelNumber) <= HARD_FEWER_FLASKS_MAX_COLORS;
+  return !hardFewerFlasks;
 }
 
 // A deterministic per-attempt seed so retries are reproducible: the same
@@ -134,14 +147,9 @@ export function generateLevel(levelNumber: number): Level {
   // or beat it.
   const minMoves = Math.ceil(numColors * (isHard ? 1.3 : 1.15));
   const frozenThisLevel = isFrozenLevel(levelNumber);
-  // Locking removes legal moves the same way hard's flask-count reduction
-  // does - stacking both constraints compounds multiplicatively, not
-  // additively. Measured directly: level 63 (7 colors, hard+fewer-flasks,
-  // locked) was 0/500 solvable attempts even though hard-alone and
-  // locked-alone are each fine on their own. So locked is skipped whenever
-  // hard is *also* using its risky reduced-flask mode on this level - same
-  // mitigation hard's own comment already documents for 8+ colors.
-  const lockedThisLevel = isLockedLevel(levelNumber) && !hardFewerFlasks;
+  // isLockedLevel already excludes hard+fewer-flasks levels - see its
+  // comment for why that combination doesn't reliably generate.
+  const lockedThisLevel = isLockedLevel(levelNumber);
 
   for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {
     const rng = new SeededRng(seedForAttempt(levelNumber, attempt));
