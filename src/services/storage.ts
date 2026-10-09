@@ -48,7 +48,8 @@ export async function unlockLevel(level: number): Promise<void> {
 // Best star rating (0-3) earned per level, keyed by level number. Loaded as
 // one JSON blob rather than one Preferences key per level, so
 // LevelSelectScene can show every cell's stars with a single read instead of
-// up to 200 of them. Keyed as string, not number: JSON object keys are
+// one per played level (levels are endless, so there's no fixed upper bound
+// on how many that could be). Keyed as string, not number: JSON object keys are
 // always strings (JSON.parse can never hand back a numeric key), and typing
 // this Record<number, ...> would claim otherwise - plain numeric indexing
 // (`all[level]`) still works fine either way since JS coerces, but the

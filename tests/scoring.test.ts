@@ -46,4 +46,15 @@ describe('computeScore', () => {
   it('replaying a level for a better rating raises its contribution to the score', () => {
     expect(computeScore({ '1': 3 })).toBeGreaterThan(computeScore({ '1': 1 }));
   });
+
+  // The stars blob is plain localStorage JSON, never server-validated, so a
+  // hand-edited or corrupted entry is reachable in practice even though the
+  // app's own writer (recordLevelStars) never produces one. A single bad
+  // entry must not NaN-poison every other level's contribution to the total.
+  it('skips corrupted entries instead of letting them NaN-poison the whole score', () => {
+    const good = computeScore({ '1': 3 });
+    expect(computeScore({ '1': 3, abc: 2 })).toBe(good); // non-numeric key
+    expect(computeScore({ '1': 3, '2': NaN })).toBe(good); // non-numeric value
+    expect(computeScore({ abc: 2, def: NaN })).toBe(0); // nothing valid at all
+  });
 });

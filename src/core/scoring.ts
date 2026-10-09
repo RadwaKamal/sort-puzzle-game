@@ -37,10 +37,21 @@ function pointsForLevel(levelNumber: number, stars: number): number {
 // plain record rather than importing storage.ts's LevelStars type, so
 // core/ (pure logic) doesn't depend on services/ (platform I/O) even just
 // for a type - same layering the repo structure already keeps.
+//
+// Skips any entry whose key or value isn't a finite number rather than
+// letting it through: this blob is plain localStorage JSON, never
+// server-validated, so a hand-edited or corrupted entry (non-numeric key,
+// a string value) is reachable in practice even though the app's own
+// recordLevelStars() never writes one. Without this guard a single bad
+// entry would NaN-poison the running total - every level's points summed
+// into it, so the whole score (not just that one level's contribution)
+// would permanently render as "Score: NaN" until storage was cleared.
 export function computeScore(allStars: Record<string, number>): number {
   let total = 0;
   for (const [levelKey, stars] of Object.entries(allStars)) {
-    total += pointsForLevel(Number(levelKey), stars);
+    const levelNumber = Number(levelKey);
+    if (!Number.isFinite(levelNumber) || !Number.isFinite(stars)) continue;
+    total += pointsForLevel(levelNumber, stars);
   }
   return total;
 }
