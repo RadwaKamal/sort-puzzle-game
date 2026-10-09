@@ -159,71 +159,41 @@ export function drawBackIcon(icon: Phaser.GameObjects.Graphics, size: number): v
   icon.lineBetween(tipX, 0, size * 0.26, 0);
 }
 
-// Fills a small triangle tangent to a circular arc at `angle`, pointing in
-// the arc's direction of travel - the arrowhead for both curved-arrow icons
-// below.
-function fillArrowhead(
-  icon: Phaser.GameObjects.Graphics,
-  cx: number,
-  cy: number,
-  r: number,
-  angle: number,
-  clockwise: boolean,
-  len: number,
-  wide: number,
-): void {
-  const px = cx + Math.cos(angle) * r;
-  const py = cy + Math.sin(angle) * r;
-  const tangent = angle + (clockwise ? Math.PI / 2 : -Math.PI / 2);
-  const tipX = px + Math.cos(tangent) * len;
-  const tipY = py + Math.sin(tangent) * len;
-  const baseA1 = tangent + (Math.PI * 3) / 4;
-  const baseA2 = tangent - (Math.PI * 3) / 4;
-  icon.fillTriangle(
-    tipX,
-    tipY,
-    px + Math.cos(baseA1) * wide,
-    py + Math.sin(baseA1) * wide,
-    px + Math.cos(baseA2) * wide,
-    py + Math.sin(baseA2) * wide,
-  );
-}
-
-// A near-full circular arrow (clockwise) with an arrowhead - "restart the
-// level from scratch".
-export function drawRestartIcon(icon: Phaser.GameObjects.Graphics, size: number): void {
-  const t = Math.max(2, size * 0.09);
-  const r = size * 0.24;
-  const startAngle = Phaser.Math.DegToRad(-50);
-  const endAngle = Phaser.Math.DegToRad(220);
-
-  icon.lineStyle(t, 0xffffff, 1);
-  icon.beginPath();
-  icon.arc(0, 0, r, startAngle, endAngle, false);
-  icon.strokePath();
-
-  icon.fillStyle(0xffffff, 1);
-  fillArrowhead(icon, 0, 0, r, endAngle, true, size * 0.15, size * 0.11);
-}
-
-// A short hooked arrow (half-loop + arrowhead) - deliberately a different
-// silhouette from the restart glyph (a small hook, not a near-full circle)
-// so the two read as distinct actions at a glance.
+// A hooked "return" arrow - a straight stem down the right side turning a
+// sharp corner into a leftward stroke, ending in a bold, unambiguous
+// triangular arrowhead. Deliberately built from straight segments rather
+// than an arc: the previous version (a thin partial-circle with a
+// tangent-computed arrowhead) read as an unclear squiggle at the button's
+// small size - two clean strokes plus a clearly-pointed triangle wasn't,
+// and doesn't risk the trig going wrong the way a curve-tangent arrowhead
+// can.
 export function drawUndoIcon(icon: Phaser.GameObjects.Graphics, size: number): void {
   const t = Math.max(2, size * 0.1);
-  const r = size * 0.2;
-  const cx = size * 0.05;
-  const cy = -size * 0.04;
-  const startAngle = Phaser.Math.DegToRad(-20);
-  const endAngle = Phaser.Math.DegToRad(190);
+  const topX = size * 0.2;
+  const topY = -size * 0.26;
+  const cornerX = size * 0.2;
+  const cornerY = size * 0.14;
+  const tipX = -size * 0.2;
+  const tipY = size * 0.14;
 
   icon.lineStyle(t, 0xffffff, 1);
   icon.beginPath();
-  icon.arc(cx, cy, r, startAngle, endAngle, true);
+  icon.moveTo(topX, topY);
+  icon.lineTo(cornerX, cornerY);
+  icon.lineTo(tipX, tipY);
   icon.strokePath();
 
+  const headLen = size * 0.22;
+  const headWide = size * 0.18;
   icon.fillStyle(0xffffff, 1);
-  fillArrowhead(icon, cx, cy, r, endAngle, false, size * 0.14, size * 0.1);
+  icon.fillTriangle(
+    tipX - headLen * 0.45,
+    tipY,
+    tipX + headLen * 0.55,
+    tipY - headWide * 0.5,
+    tipX + headLen * 0.55,
+    tipY + headWide * 0.5,
+  );
 }
 
 // A narrow-neck potion flask silhouette, solid-filled - echoes the real

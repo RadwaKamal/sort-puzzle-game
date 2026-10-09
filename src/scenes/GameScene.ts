@@ -23,7 +23,6 @@ import {
   createBadgedIconButton,
   drawSlidersIcon,
   drawBackIcon,
-  drawRestartIcon,
   drawUndoIcon,
   drawFlaskIcon,
   drawHintIcon,
@@ -99,13 +98,16 @@ export class GameScene extends Phaser.Scene {
   private frozenBadgeOutline!: Phaser.GameObjects.Graphics;
   private frozenBadgeLabel!: Phaser.GameObjects.Text;
   private menuButton!: Phaser.GameObjects.Container;
-  private restartButton!: Phaser.GameObjects.Container;
   private undoButton!: BadgedIconButton;
   private extraFlaskButton!: BadgedIconButton;
   private hintButton!: BadgedIconButton;
   private settingsButton!: Phaser.GameObjects.Container;
   private soundButton!: Button;
   private hapticsButton!: Button;
+  // Lives inside the settings popup now, alongside Sound/Haptics, rather
+  // than the main HUD row - one fewer always-visible icon button to parse
+  // at a glance, and Restart is a rarer action than Undo/Hint/Extra Flask.
+  private restartButton!: Button;
   private winOverlay!: Phaser.GameObjects.Container;
   private winBackdrop!: Phaser.GameObjects.Rectangle;
   private winTitle!: Phaser.GameObjects.Text;
@@ -189,7 +191,6 @@ export class GameScene extends Phaser.Scene {
     this.frozenBadge.setVisible(false);
 
     this.menuButton = createIconButton(this, 0, 0, 44, () => this.scene.start('Menu'), drawBackIcon, theme.accent.blue);
-    this.restartButton = createIconButton(this, 0, 0, 52, () => this.restart(), drawRestartIcon, theme.accent.blue);
     this.undoButton = createBadgedIconButton(this, 0, 0, 56, () => void this.undo(), drawUndoIcon, theme.accent.green);
     this.extraFlaskButton = createBadgedIconButton(
       this,
@@ -208,6 +209,17 @@ export class GameScene extends Phaser.Scene {
     this.settingsButton = createIconButton(this, 0, 0, 40, () => this.toggleSettings(), drawSlidersIcon);
     this.soundButton = createButton(this, 0, 0, 200, 48, '', () => this.toggleSound());
     this.hapticsButton = createButton(this, 0, 0, 200, 48, '', () => this.toggleHaptics());
+    this.restartButton = createButton(
+      this,
+      0,
+      0,
+      200,
+      48,
+      'Restart',
+      () => this.restart(),
+      theme.accent.blue,
+      '#ffffff',
+    );
     this.updateAudioToggleAccents();
 
     this.winOverlay = this.buildWinOverlay();
@@ -377,6 +389,7 @@ export class GameScene extends Phaser.Scene {
       this.settingsTitle,
       this.soundButton,
       this.hapticsButton,
+      this.restartButton,
       this.settingsCloseButton,
     ]);
     container.setDepth(900);
@@ -389,7 +402,7 @@ export class GameScene extends Phaser.Scene {
     this.settingsBackdrop.setSize(width, height);
 
     const panelW = 260;
-    const panelH = 280;
+    const panelH = 340;
     const cx = width / 2;
     const cy = height / 2;
     drawPixelPanel(
@@ -408,8 +421,9 @@ export class GameScene extends Phaser.Scene {
     this.settingsPanelOutline.setPosition(cx, cy);
 
     this.settingsTitle.setPosition(cx, cy - panelH / 2 + 28);
-    this.soundButton.setPosition(cx, cy - 45);
-    this.hapticsButton.setPosition(cx, cy + 15);
+    this.soundButton.setPosition(cx, cy - 90);
+    this.hapticsButton.setPosition(cx, cy - 30);
+    this.restartButton.setPosition(cx, cy + 30);
     this.settingsCloseButton.setPosition(cx, cy + panelH / 2 - 35);
   }
 
@@ -525,17 +539,16 @@ export class GameScene extends Phaser.Scene {
     this.menuButton.setPosition(42, 30);
     this.settingsButton.setPosition(width - 40, 30);
 
-    // The four gameplay helpers sit in a single icon row beneath the title,
-    // evenly spaced around center - replaces the old two-row text-button
-    // layout, which ate much more vertical space on small phones.
+    // Undo / Extra Flask / Hint sit in a single icon row beneath the title,
+    // evenly spaced around center - Restart moved into the settings popup
+    // (it's a rarer, more "destructive" action than these three, and three
+    // always-visible icons reads less cluttered than four).
     const HELPER_SIZE = 56;
     const HELPER_GAP = 14;
     const HELPER_Y = 150;
-    const helperCount = 4;
+    const helperCount = 3;
     const rowWidth = helperCount * HELPER_SIZE + (helperCount - 1) * HELPER_GAP;
     let hx = midX - rowWidth / 2 + HELPER_SIZE / 2;
-    this.restartButton.setPosition(hx, HELPER_Y);
-    hx += HELPER_SIZE + HELPER_GAP;
     this.undoButton.container.setPosition(hx, HELPER_Y);
     hx += HELPER_SIZE + HELPER_GAP;
     this.extraFlaskButton.container.setPosition(hx, HELPER_Y);
